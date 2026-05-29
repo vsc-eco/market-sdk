@@ -46,11 +46,21 @@ export function buildVscCallOp(params: {
 	];
 }
 
-/** Normalize "username", "@username", or "hive:username" → "hive:username". */
+/**
+ * Normalize "username", "@username", or "hive:username" → "hive:username".
+ * Throws on inputs that don't satisfy Hive username syntax — the contract's
+ * `assertValidAccount` would otherwise reject them on the wire with a
+ * generic "account contains invalid characters" abort; failing early at the
+ * client boundary surfaces the real problem (whitespace, wrong case, length
+ * out of bounds, etc.) before the user signs.
+ */
 export function normalizeHiveAccount(input: string): string {
 	const trimmed = input.trim().replace(/^@/, '');
-	if (trimmed.startsWith('hive:')) return trimmed;
-	return `hive:${trimmed}`;
+	const bare = trimmed.startsWith('hive:') ? trimmed.slice('hive:'.length) : trimmed;
+	if (!isValidHiveUsername(bare)) {
+		throw new Error(`normalizeHiveAccount: "${input}" is not a valid Hive username`);
+	}
+	return `hive:${bare}`;
 }
 
 /** Quick sanity check on a hive username (does NOT confirm L1 existence). */

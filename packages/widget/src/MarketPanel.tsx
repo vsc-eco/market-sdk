@@ -23,6 +23,7 @@ import { AcceptOfferForm } from './actions/AcceptOfferForm.js';
 import { UpdateListingForm } from './actions/UpdateListingForm.js';
 import { SweepForm } from './actions/SweepForm.js';
 import { BuyBundleForm } from './actions/BuyBundleForm.js';
+import { BundleCard } from './actions/BundleCard.js';
 import { ListBundleForm } from './actions/ListBundleForm.js';
 import { AcceptSwapForm } from './actions/AcceptSwapForm.js';
 import { ProposeSwapForm } from './actions/ProposeSwapForm.js';
@@ -36,6 +37,7 @@ import { BuyTokenForm } from './actions/BuyTokenForm.js';
 import { MakeBidForm } from './actions/MakeBidForm.js';
 import { useTokenMeta } from './components/useTokenMeta.js';
 import { useCollectionMeta } from './components/useCollectionMeta.js';
+import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
 import { Spinner } from './components/Spinner.js';
 import { MarketTile } from './components/MarketTile.js';
@@ -246,8 +248,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				.map((o) => ({ nftContract: o.nftContract, tokenId: o.tokenId }));
 		if (tab === 'auctions') return auctions.map((a) => ({ nftContract: a.nftContract, tokenId: a.tokenId }));
 		if (tab === 'mintspots') return mintSpots.map((m) => ({ nftContract: m.nftContract, tokenId: m.tokenId }));
+		if (tab === 'rentals') return rentals.map((r) => ({ nftContract: r.nftContract, tokenId: r.tokenId }));
 		return [];
-	}, [tab, listings, offers, auctions, mintSpots]);
+	}, [tab, listings, offers, auctions, mintSpots, rentals]);
 	const nftImages = useNftImages(config, visibleNftItems);
 
 	const load = useCallback(async () => {
@@ -303,7 +306,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					)
 				);
 		} catch (e) {
-			setErr(e instanceof Error ? e.message : String(e));
+			setErr(humanizeContractError(e));
 		} finally {
 			setLoading(false);
 		}
@@ -516,7 +519,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			const { txId } = await client.broadcast(op);
 			success(txId);
 		} catch (e) {
-			setErr(e instanceof Error ? e.message : String(e));
+			setErr(humanizeContractError(e));
 		} finally {
 			setCanceling(null);
 		}
@@ -993,36 +996,19 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						{scope === 'yours' ? "You don't have active bundles." : 'No active bundles from others.'}
 					</div>
 				) : (
-					<div className="magi-market-list">
-						{scopedBundles.map((b) => (
-							<div key={b.bundleId} className="magi-market-row">
-								<div className="magi-market-row-main">
-									<span className="magi-market-row-id">Bundle #{b.bundleId}</span>
-									<span className="magi-market-row-sub">{b.items.length} item{b.items.length === 1 ? '' : 's'} · {collMeta.name(b.nftContract)}</span>
-								</div>
-								<div className="magi-market-row-price">
-									{tokenMeta.format(b.paymentToken, b.price)} {tokenMeta.symbol(b.paymentToken)}
-								</div>
-								<div className="magi-market-row-actions">
-									{isSelf(b.seller) ? (
-										<button type="button" className="magi-market-submit ghost"
-											style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-											disabled={canceling === `bundle:${b.bundleId}`}
-											onClick={() => cancelListing('bundle', b.bundleId)}>
-											{canceling === `bundle:${b.bundleId}` ? 'Cancelling…' : 'Cancel'}
-										</button>
-									) : (
-										<button type="button" className="magi-market-submit"
-											style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-											disabled={!username}
-											onClick={() => setSheet({ kind: 'buyBundle', bundle: b })}>
-											Buy
-										</button>
-									)}
-								</div>
-							</div>
-						))}
-					</div>
+					scopedBundles.map((b) => (
+						<BundleCard
+							key={b.bundleId}
+							client={client}
+							bundle={b}
+							mine={isSelf(b.seller)}
+							username={username}
+							canceling={canceling === `bundle:${b.bundleId}`}
+							onBuy={() => setSheet({ kind: 'buyBundle', bundle: b })}
+							onCancel={() => cancelListing('bundle', b.bundleId)}
+							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+						/>
+					))
 				)
 			)}
 
@@ -1073,57 +1059,66 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						{scope === 'yours' ? "You don't have active rental listings." : 'No rental listings from others.'}
 					</div>
 				) : (
-					<div className="magi-market-list">
-						{scopedRentals.map((r) => {
-							const rentedByMe = !!r.renter && isSelf(r.renter);
-							const ended = r.endBlock != null && chainClock.currentBlock != null && chainClock.currentBlock >= r.endBlock;
-							return (
-								<div key={r.rentalId} className="magi-market-row">
-									<div className="magi-market-row-main">
-										<span className="magi-market-row-id">Rental #{r.rentalId} · #{r.tokenId}</span>
-										<span className="magi-market-row-sub">
-											{tokenMeta.format(r.paymentToken, r.pricePerBlock)} {tokenMeta.symbol(r.paymentToken)} /block · {r.minBlocks}–{r.maxBlocks} blocks
-											{r.renter ? ` · rented by ${r.renter}${ended ? ' (ended)' : ''}` : ''}
-										</span>
-									</div>
-									<div className="magi-market-row-actions">
-										{isSelf(r.owner) && !r.renter && (
-											<button type="button" className="magi-market-submit ghost"
-												style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-												disabled={canceling === `rental:${r.rentalId}`}
-												onClick={() => cancelListing('rental', r.rentalId)}>
-												{canceling === `rental:${r.rentalId}` ? 'Cancelling…' : 'Cancel'}
-											</button>
-										)}
-										{isSelf(r.owner) && r.renter && ended && (
-											<button type="button" className="magi-market-submit"
-												style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-												disabled={canceling === `endRental:${r.rentalId}`}
-												onClick={() => cancelListing('endRental', r.rentalId)}>
-												{canceling === `endRental:${r.rentalId}` ? 'Ending…' : 'End rental'}
-											</button>
-										)}
-										{rentedByMe && !ended && (
-											<button type="button" className="magi-market-submit ghost"
-												style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-												disabled={canceling === `endRentalEarly:${r.rentalId}`}
-												onClick={() => cancelListing('endRentalEarly', r.rentalId)}>
-												{canceling === `endRentalEarly:${r.rentalId}` ? 'Ending…' : 'End early'}
-											</button>
-										)}
-										{!isSelf(r.owner) && !r.renter && (
-											<button type="button" className="magi-market-submit"
-												style={{ width: 'auto', padding: '0.4rem 0.9rem' }}
-												disabled={!username}
-												onClick={() => setSheet({ kind: 'rent', rental: r })}>
-												Rent
-											</button>
-										)}
-									</div>
-								</div>
-							);
-						})}
-					</div>
+					groupByContract(scopedRentals).map((g) => (
+						<CollectionGroup
+							key={g.contractId}
+							collectionName={collMeta.name(g.contractId)}
+							count={g.items.length}
+							action={ownerGear(g.contractId)}
+						>
+							{g.items.map((r) => {
+								const rentedByMe = !!r.renter && isSelf(r.renter);
+								const ended = r.endBlock != null && chainClock.currentBlock != null && chainClock.currentBlock >= r.endBlock;
+								return (
+									<MarketTile
+										key={r.rentalId}
+										imageUrl={nftImages.get(r.nftContract, r.tokenId)}
+										tokenId={r.tokenId}
+										subtitle={
+											<>
+												<div>{r.minBlocks}–{r.maxBlocks} blocks</div>
+												{r.renter && <div className={ended ? 'magi-market-tile-expiry expired' : undefined}>{ended ? 'rental ended' : `rented by ${r.renter}`}</div>}
+											</>
+										}
+										price={<>{tokenMeta.format(r.paymentToken, r.pricePerBlock)} {tokenMeta.symbol(r.paymentToken)} /block</>}
+										onOpen={() => setSheet({ kind: 'nftDetails', nftContract: r.nftContract, tokenId: r.tokenId })}
+										actions={
+											<>
+												{isSelf(r.owner) && !r.renter && (
+													<button type="button" className="magi-market-submit ghost"
+														disabled={canceling === `rental:${r.rentalId}`}
+														onClick={() => cancelListing('rental', r.rentalId)}>
+														{canceling === `rental:${r.rentalId}` ? 'Cancelling…' : 'Cancel'}
+													</button>
+												)}
+												{isSelf(r.owner) && r.renter && ended && (
+													<button type="button" className="magi-market-submit"
+														disabled={canceling === `endRental:${r.rentalId}`}
+														onClick={() => cancelListing('endRental', r.rentalId)}>
+														{canceling === `endRental:${r.rentalId}` ? 'Ending…' : 'End rental'}
+													</button>
+												)}
+												{rentedByMe && !ended && (
+													<button type="button" className="magi-market-submit ghost"
+														disabled={canceling === `endRentalEarly:${r.rentalId}`}
+														onClick={() => cancelListing('endRentalEarly', r.rentalId)}>
+														{canceling === `endRentalEarly:${r.rentalId}` ? 'Ending…' : 'End early'}
+													</button>
+												)}
+												{!isSelf(r.owner) && !r.renter && (
+													<button type="button" className="magi-market-submit"
+														disabled={!username}
+														onClick={() => setSheet({ kind: 'rent', rental: r })}>
+														Rent
+													</button>
+												)}
+											</>
+										}
+									/>
+								);
+							})}
+						</CollectionGroup>
+					))
 				)
 			)}
 

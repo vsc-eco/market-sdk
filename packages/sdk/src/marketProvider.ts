@@ -52,6 +52,13 @@ export interface MarketProvider {
 	getOffers(filter?: { buyer?: string; nftContract?: string; activeOnly?: boolean }): Promise<Offer[]>;
 	getAuctions(filter?: { seller?: string; nftContract?: string; activeOnly?: boolean }): Promise<Auction[]>;
 	getBundles(filter?: { seller?: string; activeOnly?: boolean }): Promise<BundleListing[]>;
+	/**
+	 * The per-item NFTs of one bundle, read from node state — the
+	 * `magi_market_bundles` view only carries the item COUNT, so this reads
+	 * the `bnd|<id>|<i>_ti` / `_amt` / `nc` keys directly to recover the
+	 * actual token ids (e.g. to render the bundle's contents).
+	 */
+	getBundleItems(bundleId: number): Promise<{ nftContract: string; items: Array<{ tokenId: string; amount: number }> }>;
 	getSwaps(filter?: { proposer?: string; activeOnly?: boolean }): Promise<SwapProposal[]>;
 	getRentals(filter?: { owner?: string; renter?: string; activeOnly?: boolean }): Promise<RentalListing[]>;
 	getMintSpotListings(filter?: { lister?: string; nftContract?: string; activeOnly?: boolean }): Promise<MintSpotListing[]>;
@@ -548,6 +555,34 @@ export function createMarketProvider(
 				100,
 				mapBundle
 			),
+		getBundleItems: async (bundleId: number) => {
+			// Bundles cap at 20 items; read all candidate slots in one
+			// getStateByKeys and stop at the first empty token id. uint64
+			// state values come back as decimal strings (encoding:"string").
+			const MAX = 20;
+			const keys = [`bnd|${bundleId}|nc`];
+			for (let i = 0; i < MAX; i++) keys.push(`bnd|${bundleId}|${i}_ti`, `bnd|${bundleId}|${i}_amt`);
+			const q = `query S($c:String!,$k:[String!]!){ getStateByKeys(contractId:$c,keys:$k,encoding:"string") }`;
+			let s: Record<string, string | null> = {};
+			try {
+				const data = await gqlFetchFailover<{ getStateByKeys: Record<string, string | null> | null }>(
+					nodeUrls(),
+					q,
+					{ c: cid(), k: keys },
+					fo
+				);
+				s = data.getStateByKeys ?? {};
+			} catch {
+				return { nftContract: '', items: [] };
+			}
+			const items: Array<{ tokenId: string; amount: number }> = [];
+			for (let i = 0; i < MAX; i++) {
+				const ti = s[`bnd|${bundleId}|${i}_ti`];
+				if (!ti) break;
+				items.push({ tokenId: ti, amount: num(s[`bnd|${bundleId}|${i}_amt`]) || 1 });
+			}
+			return { nftContract: s[`bnd|${bundleId}|nc`] ?? '', items };
+		},
 		getSwaps: (f = {}) =>
 			indexerList<SwapRow, SwapProposal>(
 				'magi_market_swaps',

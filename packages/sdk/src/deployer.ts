@@ -145,16 +145,88 @@ function parseUtcTs(s: string): number {
 }
 
 /**
+ * Trust limits for the `transfer` legs of a deployer-returned op bundle.
+ * Without this, a compromised or malicious deployer endpoint could ship a
+ * `transfer` op pointing at an attacker-controlled account for an arbitrary
+ * amount, and the client would happily ask the user to sign it (the
+ * deploy-op block makes it look routine). These defaults match the current
+ * Magi deployer's actual usage — pay the gateway, never more than 100
+ * units of TBD/HBD/HIVE — and can be overridden when the deployer's fee
+ * schedule legitimately changes.
+ */
+export interface DeployerTransferLimits {
+	/** Accounts the deployer transfer leg is allowed to pay (lowercase). */
+	allowedRecipients?: string[];
+	/** Currencies (the asset symbol at the end of the amount string) the
+	 *  deployer transfer leg is allowed to pay in. */
+	allowedCurrencies?: string[];
+	/** Hard cap on the numeric portion of the amount (e.g. 100 means
+	 *  "10.000 HBD" is fine, "1000.000 HBD" is not). */
+	maxAmount?: number;
+}
+
+const DEFAULT_TRANSFER_LIMITS: Required<DeployerTransferLimits> = {
+	allowedRecipients: ['vsc.gateway', 'vsc.testnet'],
+	allowedCurrencies: ['HBD', 'HIVE', 'TBD'],
+	maxAmount: 100
+};
+
+/**
+ * Validate the deployer-returned `transfer` op against the trust limits.
+ * Throws on violation so the caller never broadcasts an attacker-shaped
+ * transfer. The Hive `amount` string format is `"X.XXX SYM"` (3 decimals
+ * for HBD/HIVE/TBD), which is the only form the upstream deployer emits.
+ */
+function validateDeployerTransfer(
+	to: string,
+	amountStr: string,
+	limits: Required<DeployerTransferLimits>
+): void {
+	const recipient = to.toLowerCase();
+	if (!limits.allowedRecipients.includes(recipient)) {
+		throw new Error(
+			`substituteDeployerOps: deployer transfer to "${to}" is not in the allowed-recipient list (${limits.allowedRecipients.join(', ')}) — refusing to sign a potentially malicious transfer`
+		);
+	}
+	const match = /^(\d+(?:\.\d+)?)\s+([A-Z]+)$/.exec(amountStr.trim());
+	if (!match) {
+		throw new Error(
+			`substituteDeployerOps: deployer transfer amount "${amountStr}" is not a recognized Hive amount (expected "<number> <SYMBOL>")`
+		);
+	}
+	const numeric = Number(match[1]);
+	const currency = match[2];
+	if (!limits.allowedCurrencies.includes(currency)) {
+		throw new Error(
+			`substituteDeployerOps: deployer transfer in "${currency}" is not in the allowed-currency list (${limits.allowedCurrencies.join(', ')})`
+		);
+	}
+	if (!Number.isFinite(numeric) || numeric < 0 || numeric > limits.maxAmount) {
+		throw new Error(
+			`substituteDeployerOps: deployer transfer amount ${numeric} ${currency} exceeds the safety cap of ${limits.maxAmount} — refusing to sign`
+		);
+	}
+}
+
+/**
  * Substitute `{{username}}` placeholders inside the operations the
  * deployer returned with the actual Hive username, returning a clean
- * Hive-broadcast-ready array. Mirrors okinoko-terminal's substitution
- * step but keeps the typing tight.
+ * Hive-broadcast-ready array. Validates every `transfer` leg against the
+ * `transferLimits` (default: pay only `vsc.gateway`/`vsc.testnet` in
+ * HBD/HIVE/TBD, ≤100 units) — a compromised deployer cannot smuggle an
+ * arbitrary transfer through this helper.
  */
 export function substituteDeployerOps(
 	operations: DeployerOp[],
 	username: string,
-	netId: MagiNetwork
+	netId: MagiNetwork,
+	transferLimits: DeployerTransferLimits = {}
 ): unknown[] {
+	const limits: Required<DeployerTransferLimits> = {
+		allowedRecipients: transferLimits.allowedRecipients ?? DEFAULT_TRANSFER_LIMITS.allowedRecipients,
+		allowedCurrencies: transferLimits.allowedCurrencies ?? DEFAULT_TRANSFER_LIMITS.allowedCurrencies,
+		maxAmount: transferLimits.maxAmount ?? DEFAULT_TRANSFER_LIMITS.maxAmount
+	};
 	const out: unknown[] = [];
 	for (const op of operations) {
 		if (op.type === 'custom_json') {
@@ -192,12 +264,16 @@ export function substituteDeployerOps(
 				amount: string;
 				memo: string;
 			};
+			// Map the legacy testnet placeholder to the actual gateway account
+			// BEFORE validation so the allowed-recipients check sees the
+			// substituted account.
+			const to = d.to === 'vsc.testnet' ? 'vsc.gateway' : d.to;
+			validateDeployerTransfer(to, d.amount, limits);
 			out.push([
 				'transfer',
 				{
 					from: d.from === '{{username}}' ? username : d.from,
-					// Map the legacy testnet placeholder to the actual gateway account.
-					to: d.to === 'vsc.testnet' ? 'vsc.gateway' : d.to,
+					to,
 					amount: d.amount,
 					memo: d.memo
 				}

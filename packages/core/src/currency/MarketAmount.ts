@@ -17,20 +17,36 @@ export class MarketAmount {
 		this.decimals = decimals;
 	}
 
-	/** Parse a human "12.345" string at the given decimals into smallest units. */
+	/**
+	 * Parse a human "12.345" string at the given decimals into smallest units.
+	 *
+	 * - Rejects negatives: the contract treats every money field as unsigned;
+	 *   a `-5` smallest-unit string would parse as the literal characters and
+	 *   abort on the wire, but at the client boundary we can produce a clearer
+	 *   error.
+	 * - Rejects extra fractional precision: silently truncating "1.123456789"
+	 *   to "1.123" for a 3-decimal token loses value the caller almost
+	 *   certainly didn't mean to lose. Force them to round explicitly.
+	 */
 	static fromDecimal(value: string | number, decimals: number): MarketAmount {
 		const s = String(value).trim();
-		if (s === '' || s === '-') return new MarketAmount(0n, decimals);
+		if (s === '') return new MarketAmount(0n, decimals);
 		if (!/^-?\d*\.?\d*$/.test(s)) {
 			throw new Error(`MarketAmount.fromDecimal: invalid number "${s}"`);
 		}
-		const negative = s.startsWith('-');
-		const abs = negative ? s.slice(1) : s;
-		const [intPart = '0', fracPart = ''] = abs.split('.');
-		const fracPadded = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
+		if (s.startsWith('-')) {
+			throw new Error(`MarketAmount.fromDecimal: negative amounts are not supported, got "${s}"`);
+		}
+		const [intPart = '0', fracPart = ''] = s.split('.');
+		if (fracPart.length > decimals) {
+			throw new Error(
+				`MarketAmount.fromDecimal: "${s}" has ${fracPart.length} fractional digits but the token only supports ${decimals} — round the value before passing it in`
+			);
+		}
+		const fracPadded = fracPart + '0'.repeat(decimals - fracPart.length);
 		const combined = `${intPart}${fracPadded}`.replace(/^0+(?=\d)/, '');
 		const raw = BigInt(combined === '' ? '0' : combined);
-		return new MarketAmount(negative ? -raw : raw, decimals);
+		return new MarketAmount(raw, decimals);
 	}
 
 	/** The smallest-unit decimal string the contract wants on the wire. */

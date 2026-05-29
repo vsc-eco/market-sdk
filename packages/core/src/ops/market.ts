@@ -191,7 +191,27 @@ export interface ListParams {
 	settleToken?: string;
 	minSettleOut?: string;
 }
+/**
+ * Guard a `amount: number` field against the JS-double precision cliff at
+ * 2^53. The contract treats every amount as a `uint64`, so any caller-side
+ * silent truncation to a representable double would mis-encode a >2^53
+ * batch. Also rejects negative / non-integer / non-finite — all of which
+ * would abort on the wire with a less helpful message.
+ */
+export function assertSafeAmount(amount: number, fieldName = 'amount'): void {
+	if (!Number.isInteger(amount) || amount < 1 || amount > Number.MAX_SAFE_INTEGER) {
+		throw new Error(
+			`${fieldName}: must be a positive safe integer (1..${Number.MAX_SAFE_INTEGER}); got ${amount}`
+		);
+	}
+}
+
+/** Mirror the contract's batch cap on the client so an oversized batch
+ *  fails clearly before signing instead of with a generic chain abort. */
+export const MAX_BATCH_ITEMS = 20;
+
 function listPayload(p: ListParams): Record<string, unknown> {
+	assertSafeAmount(p.amount, 'list.amount');
 	return {
 		nftContract: p.nftContract,
 		tokenId: p.tokenId,
@@ -231,6 +251,7 @@ export function buildBuy(
 	p: BuyParams,
 	intents?: VscIntent[]
 ): MarketOpBundle {
+	assertSafeAmount(p.amount, 'buy.amount');
 	return bundle(ctx, 'buy', { listingId: p.listingId, amount: p.amount }, undefined, intents);
 }
 
@@ -244,11 +265,20 @@ export function buildUpdateListing(
 
 /** Atomically create multiple listings in one tx. */
 export function buildBatchList(ctx: MarketOpContext, p: { items: ListParams[] }): MarketOpBundle {
+	if (p.items.length === 0) throw new Error('batchList: items[] cannot be empty');
+	if (p.items.length > MAX_BATCH_ITEMS) {
+		throw new Error(`batchList: items[] capped at ${MAX_BATCH_ITEMS}, got ${p.items.length}`);
+	}
 	return bundle(ctx, 'batchList', { items: p.items.map(listPayload) });
 }
 
 /** Atomically buy multiple listings in one tx. */
 export function buildBatchBuy(ctx: MarketOpContext, p: { items: BuyParams[] }, intents?: VscIntent[]): MarketOpBundle {
+	if (p.items.length === 0) throw new Error('batchBuy: items[] cannot be empty');
+	if (p.items.length > MAX_BATCH_ITEMS) {
+		throw new Error(`batchBuy: items[] capped at ${MAX_BATCH_ITEMS}, got ${p.items.length}`);
+	}
+	p.items.forEach((i) => assertSafeAmount(i.amount, 'batchBuy.amount'));
 	return bundle(
 		ctx,
 		'batchBuy',
@@ -276,6 +306,7 @@ export function buildMakeOffer(
 	p: MakeOfferParams,
 	intents?: VscIntent[]
 ): MarketOpBundle {
+	assertSafeAmount(p.amount, 'makeOffer.amount');
 	return bundle(
 		ctx,
 		'makeOffer',
@@ -302,6 +333,7 @@ export function buildAcceptOffer(
 	ctx: MarketOpContext,
 	p: { offerId: number; amount: number }
 ): MarketOpBundle {
+	assertSafeAmount(p.amount, 'acceptOffer.amount');
 	return bundle(ctx, 'acceptOffer', { offerId: p.offerId, amount: p.amount });
 }
 
@@ -310,6 +342,7 @@ export function buildAcceptCollectionOffer(
 	ctx: MarketOpContext,
 	p: { offerId: number; tokenId: string; amount: number }
 ): MarketOpBundle {
+	assertSafeAmount(p.amount, 'acceptCollectionOffer.amount');
 	return bundle(ctx, 'acceptCollectionOffer', {
 		offerId: p.offerId,
 		tokenId: p.tokenId,
@@ -335,6 +368,7 @@ export interface CreateAuctionParams {
 }
 /** Create an auction (NFT is escrowed to the marketplace for its duration). */
 export function buildCreateAuction(ctx: MarketOpContext, p: CreateAuctionParams): MarketOpBundle {
+	assertSafeAmount(p.amount, 'createAuction.amount');
 	return bundle(ctx, 'createAuction', {
 		nftContract: p.nftContract,
 		tokenId: p.tokenId,
@@ -475,6 +509,11 @@ export interface ListBundleParams {
 }
 /** List a single-collection bundle for an all-or-nothing price. */
 export function buildListBundle(ctx: MarketOpContext, p: ListBundleParams): MarketOpBundle {
+	if (p.items.length === 0) throw new Error('listBundle: items[] cannot be empty');
+	if (p.items.length > MAX_BATCH_ITEMS) {
+		throw new Error(`listBundle: items[] capped at ${MAX_BATCH_ITEMS}, got ${p.items.length}`);
+	}
+	p.items.forEach((i) => assertSafeAmount(i.amount, 'listBundle.items.amount'));
 	return bundle(ctx, 'listBundle', {
 		nftContract: p.nftContract,
 		items: p.items,
@@ -516,6 +555,8 @@ export interface ProposeSwapParams {
 }
 /** Propose an NFT-for-NFT swap (optional token top-up). */
 export function buildProposeSwap(ctx: MarketOpContext, p: ProposeSwapParams): MarketOpBundle {
+	assertSafeAmount(p.offeredAmount, 'proposeSwap.offeredAmount');
+	assertSafeAmount(p.wantedAmount, 'proposeSwap.wantedAmount');
 	return bundle(ctx, 'proposeSwap', {
 		offeredNft: p.offeredNft,
 		offeredTokenId: p.offeredTokenId,
@@ -558,6 +599,7 @@ export interface ListRentalParams {
 }
 /** List rental rights (NFT escrowed owner↔market, never to the renter). */
 export function buildListRental(ctx: MarketOpContext, p: ListRentalParams): MarketOpBundle {
+	assertSafeAmount(p.amount, 'listRental.amount');
 	return bundle(ctx, 'listRental', {
 		nftContract: p.nftContract,
 		tokenId: p.tokenId,
@@ -626,6 +668,7 @@ export function buildBuyMintSpot(
 	p: { listingId: number; amount: number },
 	intents?: VscIntent[]
 ): MarketOpBundle {
+	assertSafeAmount(p.amount, 'buyMintSpot.amount');
 	return bundle(ctx, 'buyMintSpot', { listingId: p.listingId, amount: p.amount }, undefined, intents);
 }
 

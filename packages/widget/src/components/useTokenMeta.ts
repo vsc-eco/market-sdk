@@ -183,7 +183,18 @@ export function useTokenMeta(config: MagiConfig): TokenMeta {
 			const k = (id || '').toLowerCase();
 			return NATIVE[k] ?? map.get(id);
 		};
-		const decimalsOf = (id: string) => lookup(id)?.decimals ?? 3;
+		/** Decimals if known, null otherwise. Replaces the prior `?? 3`
+		 *  fallback at the boundaries where guessing wrong is destructive
+		 *  (toMicro scales a user-entered "1.50000000" by the precision —
+		 *  guessing 3 for an 8-dp BTC turns 1.5 BTC into 1500 sats, a
+		 *  100_000× under-charge). Display helpers still fall back to 3
+		 *  because rendering a vaguely-wrong number is far less harmful
+		 *  than refusing to render at all. */
+		const knownDecimalsOf = (id: string): number | null => {
+			const v = lookup(id);
+			return v ? v.decimals : null;
+		};
+		const decimalsOf = (id: string) => knownDecimalsOf(id) ?? 3;
 		// Dropdown list = the whitelisted set, resolved through the metadata
 		// map (unknown whitelisted ids degrade to a shortened id + 3 dp).
 		const tokens: TokenMetaRow[] = whitelist
@@ -202,11 +213,18 @@ export function useTokenMeta(config: MagiConfig): TokenMeta {
 			name: (id: string) => lookup(id)?.name ?? id ?? '',
 			decimals: decimalsOf,
 			smallestUnit: (id: string) => {
-				const d = decimalsOf(id);
+				const d = knownDecimalsOf(id);
+				if (d === null) return ''; // unknown → no minimum-unit hint
 				return d <= 0 ? '1' : `0.${'0'.repeat(d - 1)}1`;
 			},
 			format: (id: string, raw) => microToHuman(raw, decimalsOf(id)),
-			toMicro: (id: string, human: string) => humanToMicro(human, decimalsOf(id)),
+			// Destructive: returns "" (the existing "disable submit" sentinel)
+			// when decimals are unknown rather than silently mis-scaling.
+			toMicro: (id: string, human: string) => {
+				const d = knownDecimalsOf(id);
+				if (d === null) return '';
+				return humanToMicro(human, d);
+			},
 			tokens,
 			ready
 		};
