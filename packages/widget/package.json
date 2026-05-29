@@ -1,0 +1,74 @@
+{
+  "name": "@vsc.eco/market-widget",
+  "version": "0.0.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "Embeddable Magi NFT-marketplace panel \u2014 React component + web component",
+  "keywords": [
+    "hive",
+    "vsc",
+    "magi",
+    "nft",
+    "widget",
+    "react",
+    "web-component"
+  ],
+  "homepage": "https://github.com/vsc-eco/market-sdk/tree/main/packages/widget#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vsc-eco/market-sdk.git",
+    "directory": "packages/widget"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./webcomponent": {
+      "import": "./dist/webcomponent.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./themes/light.css": "./dist/themes/light.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.tsx src/webcomponent.tsx --format esm --dts --clean --external react --external react-dom --loader .css=copy --loader .svg=dataurl && cp dist/styles-*.css dist/styles.css 2>/dev/null || true && mkdir -p dist/themes && cp src/themes/light.css dist/themes/light.css",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0",
+    "@aioha/aioha": "^1.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@aioha/aioha": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@vsc.eco/market-core": "workspace:*",
+    "@vsc.eco/market-sdk": "workspace:*",
+    "@r2wc/react-to-web-component": "^2.0.3",
+    "@vsc.eco/token-core": "link:../../../nft-sdk/packages/core",
+    "@vsc.eco/token-sdk": "link:../../../nft-sdk/packages/sdk"
+  },
+  "devDependencies": {
+    "@aioha/aioha": "^1.8.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.5",
+    "vitest": "^2.1.8"
+  }
+}

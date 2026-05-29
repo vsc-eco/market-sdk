@@ -1,0 +1,1488 @@
+/* Magi token widget - themeable via CSS custom properties.
+   Mirrors @vsc.eco/crosschain-widget naming so a single host theme block
+   styles both swap and token widgets. Override any --magi-* variable on
+   .magi-market (or a parent) to match your host app.
+
+   The default theme is Altera dark. Hosts that want light can opt in
+   with the `magi-market-light-host` class on the panel (or any ancestor),
+   or override the variables directly. */
+
+.magi-market {
+	/* ==== Default theme: Altera dark ==== */
+	--magi-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+	/* Modal card uses an opaque base so action dialogs sit clearly above
+	 * the panel behind them (the .magi-market-modal overlay is only 55%
+	 * black, so a translucent card was double-bleeding the panel chrome
+	 * into the dialog). */
+	--magi-modal-bg: #1c1f2c;
+	--magi-card-border: rgba(255, 255, 255, 0.15);
+	--magi-card-shadow:
+		0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.3),
+		inset 1px 0 1px rgba(255, 255, 255, 0.15), inset 0 -1px 1px rgba(0, 0, 0, 0.2);
+	--magi-card-radius: 20px;
+	--magi-accent: #6f6af8;
+	--magi-accent-hover: #7e74ff;
+	--magi-accent-light: rgba(111, 106, 248, 0.18);
+	--magi-green: #00c218;
+	--magi-red: #e31337;
+	--magi-text: #ffffff;
+	--magi-text-secondary: #c0c4cc;
+	--magi-text-muted: #828a93;
+	--magi-field-bg: rgba(0, 0, 0, 0.25);
+	--magi-field-border: rgba(255, 255, 255, 0.08);
+	--magi-input-bg: transparent;
+	--magi-tile-bg: rgba(0, 0, 0, 0.2);
+	--magi-tile-bg-hover: rgba(255, 255, 255, 0.04);
+	--magi-font: 'Nunito Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+
+	background: var(--magi-card-bg);
+	border: 1px solid var(--magi-card-border);
+	border-radius: var(--magi-card-radius);
+	padding: 1.25rem;
+	box-shadow: var(--magi-card-shadow);
+	color: var(--magi-text);
+	font-family: var(--magi-font);
+	max-width: 720px;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	position: relative;
+}
+
+.magi-market *,
+.magi-market *::before,
+.magi-market *::after {
+	box-sizing: border-box;
+}
+
+/* Bare wrapper - used when nesting the panel inside another .magi-market host
+ * (e.g. MagiAssets). Inherits all --magi-* vars from the parent without
+ * drawing a second card. */
+.magi-market-bare {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	position: relative;
+}
+.magi-market-bare *,
+.magi-market-bare *::before,
+.magi-market-bare *::after {
+	box-sizing: border-box;
+}
+
+/* ==== Header ==== */
+.magi-market-header {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.4rem;
+	margin-bottom: 1rem;
+}
+.magi-market-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.75rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 2rem;
+	background: var(--magi-accent-light);
+}
+.magi-market-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--magi-green);
+	box-shadow: 0 0 6px 1px rgba(22, 163, 74, 0.4);
+	animation: magi-market-dot-pulse 2s ease-in-out infinite;
+}
+@keyframes magi-market-dot-pulse {
+	0%, 100% { box-shadow: 0 0 4px 1px rgba(22, 163, 74, 0.25); }
+	50%      { box-shadow: 0 0 10px 3px rgba(22, 163, 74, 0.55); }
+}
+
+/* ==== Circular progress spinner (deploy "polling indexer" stage) ==== */
+.magi-market-spinner {
+	width: 28px;
+	height: 28px;
+	border: 3px solid var(--magi-field-border);
+	border-top-color: var(--magi-accent);
+	border-radius: 50%;
+	animation: magi-market-spin 0.85s linear infinite;
+	flex-shrink: 0;
+}
+@keyframes magi-market-spin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}
+.magi-market-spinner-row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.4rem 0.5rem;
+	background: var(--magi-accent-light);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	color: var(--magi-text-secondary);
+	font-size: 0.8rem;
+}
+.magi-market-badge-text {
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	color: var(--magi-text);
+}
+.magi-market-subtitle {
+	font-size: 0.75rem;
+	color: var(--magi-text-secondary);
+	margin: 0;
+}
+
+/* ==== Refresh button (top-right of every panel) ====
+ * Absolutely positioned inside the panel card so it sits in the corner
+ * without consuming a header slot. The .magi-market / .magi-market-bare
+ * containers are both `position: relative`, which anchors this. The
+ * icon spins while the panel is reloading; disabled state prevents
+ * queueing multiple refetches by mashing the button. */
+.magi-market-refresh-btn {
+	position: absolute;
+	top: 0.85rem;
+	right: 0.85rem;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid var(--magi-field-border);
+	background: var(--magi-card-bg);
+	color: var(--magi-text-secondary);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+	z-index: 2;
+}
+.magi-market-refresh-btn:hover:not(:disabled) {
+	color: var(--magi-accent);
+	border-color: var(--magi-accent);
+	background: var(--magi-accent-light);
+}
+.magi-market-refresh-btn:disabled {
+	cursor: progress;
+}
+.magi-market-refresh-btn svg.spinning {
+	animation: magi-market-spin 0.85s linear infinite;
+}
+.magi-market-bare > .magi-market-refresh-btn {
+	/* Hide the duplicate when nested inside MagiAssets (the parent
+	 * .magi-market already shows its own button). */
+	display: none;
+}
+
+/* ==== Toolbar (search + deploy buttons) ====
+ * The toolbar wraps the user search and any header-level action buttons
+ * (currently just "Deploy") into a single row sitting between the panel
+ * header and the content. Search stretches to fill, action buttons hug
+ * the right edge. Wraps to two rows on narrow viewports. */
+.magi-market-toolbar {
+	display: flex;
+	align-items: stretch;
+	justify-content: flex-end;
+	gap: 0.4rem;
+	margin: 0 0 0.85rem;
+	flex-wrap: wrap;
+}
+.magi-market-toolbar .magi-market-search {
+	flex: 1;
+	min-width: 200px;
+	margin: 0;
+}
+.magi-market-toolbar-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.3rem 0.7rem;
+	border: 1px solid var(--magi-card-border);
+	background: transparent;
+	color: var(--magi-text-muted);
+	border-radius: 8px;
+	font-family: var(--magi-font);
+	font-size: 0.72rem;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.magi-market-toolbar-action:hover {
+	background: var(--magi-tile-bg-hover);
+	border-color: var(--magi-accent);
+	color: var(--magi-text);
+}
+
+/* ==== User search row ==== */
+.magi-market-search {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.4rem 0.5rem;
+	margin: 0 0 0.85rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	font-family: var(--magi-font);
+}
+.magi-market-search-icon {
+	color: var(--magi-text-muted);
+	margin-left: 0.2rem;
+	flex-shrink: 0;
+}
+.magi-market-search input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: 0;
+	outline: none;
+	color: var(--magi-text);
+	font-family: inherit;
+	font-size: 0.85rem;
+	padding: 0.25rem 0.4rem;
+}
+.magi-market-search input::placeholder {
+	color: var(--magi-text-muted);
+}
+.magi-market-search button {
+	padding: 0.3rem 0.7rem;
+	border-radius: 6px;
+	font-family: inherit;
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	border: 1px solid var(--magi-field-border);
+	background: transparent;
+	color: var(--magi-text-secondary);
+}
+.magi-market-search button:hover:not(:disabled) {
+	color: var(--magi-text);
+	border-color: var(--magi-text-muted);
+}
+.magi-market-search button.primary {
+	background: var(--magi-accent);
+	color: #ffffff;
+	border-color: var(--magi-accent);
+}
+.magi-market-search button.primary:hover:not(:disabled) {
+	background: var(--magi-accent-hover);
+	border-color: var(--magi-accent-hover);
+}
+.magi-market-search-status {
+	font-size: 0.72rem;
+	color: var(--magi-accent);
+	font-weight: 600;
+	padding: 0 0.25rem;
+	white-space: nowrap;
+}
+
+/* ==== Tab strip ==== */
+.magi-market-tabs {
+	display: flex;
+	gap: 0;
+	margin-bottom: 1rem;
+	border-bottom: 1px solid var(--magi-field-border);
+}
+.magi-market-tab {
+	flex: 1;
+	padding: 0.5rem 0.75rem;
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	color: var(--magi-text-secondary);
+	font-family: inherit;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+.magi-market-tab:hover:not(.active):not(:disabled) {
+	color: var(--magi-text);
+}
+.magi-market-tab.active {
+	color: var(--magi-accent);
+	border-bottom-color: var(--magi-accent);
+}
+.magi-market-tab:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+/* ==== Empty / loading states ==== */
+.magi-market-state {
+	padding: 2rem 1rem;
+	text-align: center;
+	color: var(--magi-text-muted);
+	font-size: 0.85rem;
+}
+
+/* ==== Collection header (group divider) ==== */
+.magi-market-group {
+	margin-top: 0.75rem;
+}
+.magi-market-group:first-of-type {
+	margin-top: 0;
+}
+.magi-market-group-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.25rem 0.5rem;
+	cursor: pointer;
+	user-select: none;
+	min-width: 0;
+}
+.magi-market-group-header:hover {
+	color: var(--magi-accent);
+}
+.magi-market-group-name {
+	font-weight: 600;
+	font-size: 0.95rem;
+	color: var(--magi-text);
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	word-break: break-word;
+}
+.magi-market-group-symbol {
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	padding: 0.1rem 0.45rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 1rem;
+}
+.magi-market-group-count {
+	margin-left: auto;
+	font-size: 0.75rem;
+	color: var(--magi-text-muted);
+}
+.magi-market-group-chevron {
+	color: var(--magi-text-muted);
+	transition: transform 0.15s ease;
+}
+.magi-market-group-chevron.expanded {
+	transform: rotate(90deg);
+}
+/* Circular icon shown between the chevron and the collection name -
+ * sourced from collection_metadata.image. Hidden via JS onError when
+ * the URL is broken; the collection name remains as the visible label. */
+.magi-market-group-icon {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 1px solid var(--magi-field-border);
+	background: var(--magi-field-bg);
+	flex-shrink: 0;
+}
+
+/* ==== Tile grid ==== */
+.magi-market-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	gap: 0.6rem;
+	margin-top: 0.5rem;
+}
+.magi-market-tile {
+	display: flex;
+	flex-direction: column;
+	background: var(--magi-tile-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	padding: 0.5rem;
+	cursor: pointer;
+	transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.05s ease;
+}
+.magi-market-tile:hover {
+	border-color: var(--magi-accent);
+	background: var(--magi-tile-bg-hover);
+}
+.magi-market-tile.selected {
+	border-color: var(--magi-accent);
+	box-shadow: 0 0 0 1px var(--magi-accent-light);
+}
+.magi-market-tile-image {
+	aspect-ratio: 1 / 1;
+	background: var(--magi-field-bg);
+	border-radius: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	margin-bottom: 0.4rem;
+}
+.magi-market-tile-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.magi-market-tile-image-placeholder {
+	font-size: 0.65rem;
+	color: var(--magi-text-muted);
+	letter-spacing: 0.04em;
+}
+
+/* ==== Template tile (mintSeries grouping) ==== */
+/* A regular tile that opens an expansion modal on click. The "stack" pseudo-
+ * element is a thin offset rectangle behind the image that telegraphs the
+ * underlying multiplicity without taking real estate from the artwork. */
+.magi-market-template-tile {
+	position: relative;
+}
+.magi-market-template-tile .magi-market-tile-image {
+	position: relative;
+}
+.magi-market-template-stack {
+	position: absolute;
+	right: -4px;
+	bottom: -4px;
+	left: 4px;
+	top: 4px;
+	border: 1px solid var(--magi-field-border);
+	border-radius: inherit;
+	background: var(--magi-field-bg);
+	z-index: -1;
+	pointer-events: none;
+}
+.magi-market-template-tile .magi-market-tile-tag {
+	background: var(--magi-accent);
+	color: #ffffff;
+}
+
+/* ==== Template expansion modal rows ==== */
+.magi-market-template-item {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.4rem 0.5rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	background: var(--magi-tile-bg);
+}
+.magi-market-template-item-img {
+	width: 44px;
+	height: 44px;
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--magi-field-bg);
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.magi-market-template-item-img.fallback {
+	background: var(--magi-accent-light);
+}
+.magi-market-template-item-img img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.magi-market-template-item-img.fallback img {
+	object-fit: contain;
+	padding: 18%;
+	opacity: 0.7;
+}
+.magi-market-template-item-info {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+.magi-market-template-item-id {
+	font-size: 0.85rem;
+	color: var(--magi-text);
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-template-item-meta {
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+}
+.magi-market-template-item-actions {
+	display: flex;
+	gap: 0.3rem;
+}
+/* Fallback Magi-logo state - used when no image was resolved or the
+ * resolved <img> failed to load. Pad the logo so it doesn't fill edge
+ * to edge, and dim it so it reads as a placeholder, not a real NFT. */
+.magi-market-tile-image.fallback {
+	background: var(--magi-accent-light);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 14%;
+}
+.magi-market-tile-fallback-img {
+	width: 100% !important;
+	height: 100% !important;
+	object-fit: contain !important;
+	opacity: 0.7;
+}
+.magi-market-tile-id {
+	font-size: 0.8rem;
+	color: var(--magi-text);
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.magi-market-tile-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-top: 0.2rem;
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+}
+.magi-market-tile-balance {
+	color: var(--magi-text-secondary);
+	font-weight: 600;
+}
+.magi-market-tile-supply {
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+	font-variant-numeric: tabular-nums;
+}
+.magi-market-tile-tag {
+	font-size: 0.6rem;
+	padding: 0.1rem 0.35rem;
+	border-radius: 1rem;
+	background: var(--magi-accent-light);
+	color: var(--magi-accent);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+/* ==== Token list (TokenPanel) ==== */
+.magi-market-token-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+.magi-market-token-row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.75rem;
+	background: var(--magi-tile-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	transition: border-color 0.15s ease;
+}
+.magi-market-token-row:hover {
+	border-color: var(--magi-accent);
+}
+.magi-market-token-icon {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: var(--magi-accent-light);
+	color: var(--magi-accent);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 0.85rem;
+	flex-shrink: 0;
+}
+.magi-market-token-info {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.magi-market-token-name {
+	font-size: 0.9rem;
+	color: var(--magi-text);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-token-symbol {
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+}
+.magi-market-token-balance {
+	margin-left: auto;
+	text-align: right;
+}
+.magi-market-token-balance-value {
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--magi-text);
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.magi-market-token-balance-label {
+	font-size: 0.65rem;
+	color: var(--magi-text-muted);
+}
+.magi-market-token-actions {
+	display: flex;
+	gap: 0.3rem;
+	margin-left: 0.5rem;
+}
+
+/* ==== Action menu / icon buttons ==== */
+.magi-market-icon-btn {
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border-radius: 8px;
+	border: 1px solid var(--magi-field-border);
+	background: transparent;
+	color: var(--magi-text-secondary);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.magi-market-icon-btn:hover:not(:disabled) {
+	color: var(--magi-accent);
+	border-color: var(--magi-accent);
+	background: var(--magi-accent-light);
+}
+.magi-market-icon-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.magi-market-icon-btn.danger:hover:not(:disabled) {
+	color: var(--magi-red);
+	border-color: var(--magi-red);
+	background: rgba(220, 38, 38, 0.08);
+}
+
+/* ==== Modal (action popup) ====
+ * Viewport-fixed rather than panel-absolute. The previous absolute version
+ * scoped the modal to its closest positioned ancestor (.magi-market / -bare),
+ * which works for the always-tall QuickSwap widget but clips badly here:
+ * a TokenPanel with one row leaves the modal a few hundred pixels of
+ * height, then `max-height: calc(100% - 2rem)` chops the card. Fixed
+ * positioning sizes against the viewport, which is always large enough,
+ * and matches what users expect from "send tokens" / "transfer NFT" flows.
+ * z-index sits well above sticky headers but below toast notifications. */
+.magi-market-modal {
+	position: fixed;
+	inset: 0;
+	/* Scroll on the overlay (not the card) so the absolute-positioned
+	 * picker dropdowns inside action modals can escape vertically instead
+	 * of being clipped by the card. `align-items: flex-start` keeps the
+	 * card pinned near the top once the content overflows the viewport. */
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding: 1rem;
+	overflow-y: auto;
+	background: rgba(0, 0, 0, 0.55);
+	backdrop-filter: blur(3px);
+	z-index: 9999;
+}
+.magi-market-modal-card {
+	width: 100%;
+	max-width: 380px;
+	/* Opaque base + subtle white highlight on top so the dialog reads
+	 * solid against the panel behind it but still picks up the Altera
+	 * card-vs-dark-bg look. The light theme override collapses the
+	 * highlight to a no-op since --magi-modal-bg is already #ffffff. */
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.03) 100%),
+		var(--magi-modal-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 1rem;
+	padding: 1.1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+	color: var(--magi-text);
+	/* No internal scroll: the .magi-market-modal overlay scrolls so picker
+	 * dropdowns inside the card can extend past the card bounds. The card
+	 * sits flush at the top of the overlay; a small margin keeps it off
+	 * the very edge. */
+	margin: clamp(0.5rem, 5vh, 4rem) 0;
+	overflow: visible;
+}
+.magi-market-modal-card--wide {
+	max-width: 520px;
+}
+.magi-market-modal-title {
+	margin: 0;
+	font-weight: 600;
+	font-size: 1.05rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+/* ==== NFT details modal ==== */
+.magi-market-details-image {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.magi-market-details-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+.magi-market-details-image.fallback {
+	background: var(--magi-accent-light);
+}
+.magi-market-details-image.fallback img {
+	width: 40%;
+	height: 40%;
+	opacity: 0.7;
+}
+.magi-market-details-description {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--magi-text-secondary);
+	line-height: 1.45;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.magi-market-details-grid {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	column-gap: 0.8rem;
+	row-gap: 0.3rem;
+	font-size: 0.8rem;
+}
+.magi-market-details-grid dt {
+	color: var(--magi-text-muted);
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	align-self: center;
+}
+.magi-market-details-grid dd {
+	margin: 0;
+	color: var(--magi-text);
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	overflow-wrap: anywhere;
+}
+.magi-market-details-props {
+	margin: 0;
+	padding: 0.6rem 0.7rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	font-size: 0.72rem;
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	color: var(--magi-text);
+	overflow-x: auto;
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 180px;
+	overflow-y: auto;
+}
+.magi-market-modal-close {
+	background: transparent;
+	border: 0;
+	color: var(--magi-text-muted);
+	cursor: pointer;
+	font-size: 1rem;
+	padding: 0.1rem 0.3rem;
+	border-radius: 6px;
+}
+.magi-market-modal-close:hover {
+	color: var(--magi-text);
+	background: var(--magi-field-bg);
+}
+.magi-market-modal-subtitle {
+	font-size: 0.8rem;
+	color: var(--magi-text-muted);
+	margin: -0.3rem 0 0;
+}
+
+/* ==== Form fields (in modals) ==== */
+.magi-market-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+.magi-market-field-label {
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--magi-text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.magi-market-input-wrap {
+	display: flex;
+	align-items: center;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	padding: 0.65rem 0.75rem;
+	transition: border-color 0.15s ease;
+}
+.magi-market-input-wrap.focused {
+	border-color: var(--magi-accent);
+}
+.magi-market-input-wrap.error {
+	border-color: var(--magi-red);
+}
+.magi-market-input-wrap input {
+	flex: 1;
+	background: transparent;
+	border: 0;
+	color: var(--magi-text);
+	font-size: 0.9rem;
+	min-width: 0;
+	outline: none;
+	font-family: inherit;
+}
+.magi-market-input-wrap input::placeholder {
+	color: var(--magi-text-muted);
+}
+.magi-market-field-hint {
+	font-size: 0.65rem;
+	color: var(--magi-text-muted);
+	margin: 0;
+	line-height: 1.4;
+}
+
+/* ==== Toggle (segmented) ==== */
+.magi-market-toggle {
+	display: inline-flex;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+	padding: 2px;
+	background: var(--magi-field-bg);
+}
+.magi-market-toggle button {
+	background: transparent;
+	border: 0;
+	padding: 0.3rem 0.7rem;
+	color: var(--magi-text-secondary);
+	font-family: inherit;
+	font-size: 0.75rem;
+	font-weight: 600;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.magi-market-toggle button.active {
+	background: var(--magi-accent);
+	color: #ffffff;
+}
+
+/* ==== Status / error rows ==== */
+.magi-market-status {
+	font-size: 0.8rem;
+	color: var(--magi-green);
+	margin: 0;
+}
+.magi-market-status.error {
+	color: var(--magi-red);
+}
+
+/* ==== Submit button ==== */
+.magi-market-submit {
+	width: 100%;
+	padding: 0.75rem 1rem;
+	border: 0;
+	border-radius: 999px;
+	background: var(--magi-accent);
+	color: #ffffff;
+	font-weight: 600;
+	font-size: 0.95rem;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.05s ease;
+}
+.magi-market-submit:hover:not(:disabled) {
+	background: var(--magi-accent-hover);
+}
+.magi-market-submit:active:not(:disabled) {
+	transform: translateY(1px);
+}
+.magi-market-submit:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.magi-market-submit.danger {
+	background: var(--magi-red);
+}
+.magi-market-submit.danger:hover:not(:disabled) {
+	background: #b91c1c;
+}
+.magi-market-submit.ghost {
+	background: transparent;
+	color: var(--magi-text-secondary);
+	border: 1px solid var(--magi-field-border);
+}
+.magi-market-submit.ghost:hover:not(:disabled) {
+	color: var(--magi-text);
+	border-color: var(--magi-text-muted);
+}
+
+/* ==== Success banner ==== */
+.magi-market-success {
+	margin-top: 0.4rem;
+	padding: 0.55rem 0.75rem;
+	background: rgba(22, 163, 74, 0.06);
+	border: 1px solid rgba(22, 163, 74, 0.15);
+	border-radius: 12px;
+	color: var(--magi-green);
+	font-size: 0.8rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+.magi-market-success-label {
+	font-weight: 600;
+	flex-shrink: 0;
+}
+.magi-market-success-tx {
+	background: rgba(22, 163, 74, 0.08);
+	color: var(--magi-green);
+	padding: 2px 8px;
+	border-radius: 6px;
+	font-size: 0.78rem;
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-success-actions {
+	display: flex;
+	gap: 0.3rem;
+	margin-left: auto;
+}
+/* Greenify the icon-buttons inside the success banner so they read as
+ * affirmative affordances instead of neutral toolbar icons. */
+.magi-market-success .magi-market-icon-btn {
+	color: var(--magi-green);
+	border-color: rgba(22, 163, 74, 0.25);
+	background: rgba(22, 163, 74, 0.04);
+	text-decoration: none;
+}
+.magi-market-success .magi-market-icon-btn:hover:not(:disabled) {
+	color: #ffffff;
+	background: var(--magi-green);
+	border-color: var(--magi-green);
+}
+
+/* ==== Batch checkbox row ==== */
+.magi-market-batch-row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.4rem 0.5rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	background: var(--magi-tile-bg);
+	cursor: pointer;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.magi-market-batch-row.checked {
+	border-color: var(--magi-accent);
+	background: var(--magi-accent-light);
+}
+.magi-market-batch-row input[type='checkbox'] {
+	accent-color: var(--magi-accent);
+	cursor: pointer;
+}
+.magi-market-batch-row input[type='number'] {
+	width: 70px;
+	background: var(--magi-card-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 6px;
+	color: var(--magi-text);
+	font-size: 0.8rem;
+	padding: 0.2rem 0.4rem;
+	text-align: right;
+	font-family: inherit;
+	margin-left: auto;
+}
+.magi-market-batch-row-id {
+	font-size: 0.8rem;
+	color: var(--magi-text);
+	font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.magi-market-batch-row-balance {
+	font-size: 0.7rem;
+	color: var(--magi-text-muted);
+}
+
+/* ==== Responsive: tablets and below (~520px) ====
+ * The widget is most useful on phones (Hive Keychain mobile, Peakd
+ * mobile views). Tighten card padding, shrink the icon/avatar/button
+ * sizes inside list items, and let toolbar pieces wrap so the name
+ * column always has room. */
+@media (max-width: 520px) {
+	.magi-market {
+		padding: 0.85rem;
+		max-width: 100%;
+	}
+	.magi-market-bare {
+		padding: 0;
+	}
+
+	/* Toolbar (search + deploy/refresh) — already wraps via flex-wrap;
+	 * here we let the search take the full width and shrink the
+	 * action button so it fits beside it more often. */
+	.magi-market-toolbar .magi-market-search {
+		min-width: 100%;
+	}
+	.magi-market-toolbar-action {
+		padding: 0 0.6rem;
+		font-size: 0.7rem;
+	}
+
+	/* NFT collection group header — let the name take the full row,
+	 * push the badge + count + owner-action buttons onto a second line.
+	 * Without this the name was wrapping to 5+ lines on a 360px-wide
+	 * screen because the right-side cluster ate ~200px. */
+	.magi-market-group-header {
+		flex-wrap: wrap;
+		row-gap: 0.3rem;
+	}
+	.magi-market-group-name {
+		flex: 1 1 100%;
+		-webkit-line-clamp: 2;
+	}
+	.magi-market-group-count {
+		margin-left: 0.25rem;
+	}
+	.magi-market-group-symbol {
+		margin-left: 0;
+	}
+
+	/* Token row — shrink everything that hugs the edges so the
+	 * monospaced balance stays readable next to the name. */
+	.magi-market-token-row {
+		gap: 0.5rem;
+		padding: 0.6rem;
+	}
+	.magi-market-token-icon {
+		width: 30px;
+		height: 30px;
+		font-size: 0.7rem;
+	}
+	.magi-market-token-info {
+		flex: 1 1 0;
+	}
+	.magi-market-token-name {
+		font-size: 0.85rem;
+	}
+	.magi-market-token-actions {
+		gap: 0.2rem;
+		margin-left: 0.3rem;
+	}
+	.magi-market-icon-btn {
+		width: 28px;
+		height: 28px;
+	}
+
+	/* NFT tile grid — slightly narrower min so two columns still fit
+	 * on ~360px viewports. */
+	.magi-market-grid {
+		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		gap: 0.5rem;
+	}
+}
+
+/* ==== Responsive: very narrow phones (~380px) ====
+ * At this size we sacrifice the per-row count + label to keep the
+ * action buttons reachable without horizontal scroll. */
+@media (max-width: 380px) {
+	/* Drop the "X tokens" count text; the chevron + expansion already
+	 * implies whether items are hidden. */
+	.magi-market-group-count {
+		display: none;
+	}
+
+	/* Stack the token-row balance under the name instead of pushing
+	 * it to a separate column. The action buttons keep their column. */
+	.magi-market-token-row {
+		flex-wrap: wrap;
+	}
+	.magi-market-token-info {
+		flex: 1 1 60%;
+	}
+	.magi-market-token-balance {
+		flex: 0 0 auto;
+		text-align: right;
+	}
+	.magi-market-token-balance-label {
+		display: none;
+	}
+	.magi-market-token-actions {
+		flex: 1 1 100%;
+		margin-left: 0;
+		justify-content: flex-end;
+		padding-top: 0.15rem;
+	}
+
+	.magi-market-modal {
+		padding: 0.5rem;
+	}
+	.magi-market-modal-card {
+		padding: 0.85rem;
+	}
+}
+
+/* ===== Listing rows (market-only; no base-class collisions) =====
+ * The panel chrome (header/badge/toolbar/tabs/state) reuses the existing
+ * token-widget classes above verbatim — these are the only additions, for
+ * the marketplace's row list (token-widget has a tile grid instead). */
+.magi-market-list { display:flex; flex-direction:column; gap:8px; margin-top:0.5rem; }
+.magi-market-row { display:flex; align-items:center; gap:14px; padding:12px 14px; border:1px solid var(--magi-card-border); border-radius:12px; background:var(--magi-tile-bg); }
+.magi-market-row:hover { background:var(--magi-tile-bg-hover); }
+.magi-market-row-main { display:flex; flex-direction:column; min-width:0; flex:1; }
+.magi-market-row-id { font-weight:700; }
+.magi-market-row-sub { font-size:12px; color:var(--magi-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.magi-market-row-price { font-size:13px; white-space:nowrap; color:var(--magi-text-muted); }
+.magi-market-row-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+/* Native <select>: `color-scheme:dark` makes the browser render the
+ * option popup in dark mode; the explicit option bg/color is the
+ * cross-browser fallback so it never flashes white on the dark theme. */
+.magi-market-input-wrap select { width:100%; background:transparent; color:inherit; border:0; font:inherit; padding:8px 10px; color-scheme:dark; cursor:pointer; outline:none; }
+.magi-market-input-wrap select option { background:var(--magi-modal-bg); color:var(--magi-text); }
+
+/* ===== NftPicker (owned-NFT dropdown with image previews) ===== */
+/* Field-styled column box (NOT the flex .magi-market-input-wrap — the
+ * inline expanding menu must stack under the trigger, not sit beside it). */
+.magi-market-nftpicker { position:relative; display:flex; flex-direction:column; background:var(--magi-field-bg); border:1px solid var(--magi-field-border); border-radius:12px; }
+.magi-market-nftpicker-trigger { display:flex; align-items:center; gap:10px; width:100%; padding:8px 10px; background:transparent; border:0; color:inherit; font:inherit; cursor:pointer; text-align:left; }
+.magi-market-nftpicker-trigger:disabled { cursor:not-allowed; opacity:.6; }
+.magi-market-nftpicker-thumb { width:34px; height:34px; border-radius:7px; object-fit:cover; background:var(--magi-tile-bg); flex-shrink:0; }
+.magi-market-nftpicker-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.magi-market-nftpicker-caret { opacity:.5; flex-shrink:0; }
+/* In-flow expanding panel (NOT an absolute dropdown): the picker lives
+ * inside a `overflow-y:auto` modal card, which would clip an absolutely
+ * positioned menu. Expanding inline lets the modal grow/scroll naturally. */
+.magi-market-nftpicker-menu {
+	position:absolute;
+	top:calc(100% + 4px);
+	left:0;
+	right:0;
+	z-index:50;
+	max-height:300px;
+	overflow-y:auto;
+	padding:10px;
+	border:1px solid var(--magi-card-border);
+	border-radius:12px;
+	background:var(--magi-modal-bg, var(--magi-tile-bg));
+	box-shadow:0 8px 24px rgba(0,0,0,0.35);
+}
+.magi-market-nftpicker-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px; }
+.magi-market-nftpicker-tile { display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px; border:1px solid transparent; border-radius:10px; background:var(--magi-tile-bg); color:inherit; font:inherit; cursor:pointer; }
+.magi-market-nftpicker-tile:hover { background:var(--magi-tile-bg-hover); }
+.magi-market-nftpicker-tile.active { border-color:var(--magi-accent); }
+.magi-market-nftpicker-tile .magi-market-nftpicker-thumb { width:64px; height:64px; }
+.magi-market-nftpicker-tile-id { font-size:11px; font-weight:700; }
+.magi-market-nftpicker-tile-bal { font-size:10px; color:var(--magi-text-muted); }
+.magi-market-link-btn { align-self:flex-start; margin-top:4px; background:none; border:0; padding:0; color:var(--magi-accent); font:inherit; font-size:12px; cursor:pointer; }
+.magi-market-link-btn:hover { text-decoration:underline; }
+
+/* ===== TokenPicker rows ===== */
+.magi-market-tokenlist { display:flex; flex-direction:column; gap:4px; }
+.magi-market-tokenrow { display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:8px 10px; border:1px solid transparent; border-radius:8px; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.magi-market-tokenrow:hover { background:var(--magi-tile-bg-hover); }
+.magi-market-tokenrow.active { border-color:var(--magi-accent); }
+.magi-market-token-sym { font-weight:700; font-size:13px; }
+.magi-market-token-tag { margin-left:auto; font-size:10px; color:var(--magi-text-muted); border:1px solid var(--magi-card-border); border-radius:6px; padding:1px 6px; }
+
+/* Inline (always-visible) NFT picker container — scrolls within the modal. */
+.magi-market-nftpicker-inline { max-height:340px; overflow-y:auto; padding:10px; border:1px solid var(--magi-card-border); border-radius:12px; background:var(--magi-tile-bg); }
+
+/* Real native-asset logos in the token picker (HBD/HIVE) */
+.magi-market-token-iconimg { width:36px; height:36px; border-radius:50%; padding:6px; background:var(--magi-accent-light); object-fit:contain; flex-shrink:0; }
+
+/* ==== Clickable NFT row + details popup ==== */
+.magi-market-row-main--link { cursor: pointer; border-radius: 6px; }
+.magi-market-row-main--link:hover .magi-market-row-id { text-decoration: underline; }
+.magi-market-row-main--link:focus-visible {
+	outline: 2px solid var(--magi-accent, #7c5cff);
+	outline-offset: 2px;
+}
+.magi-market-nftdetails { display: flex; flex-direction: column; gap: 0.75rem; }
+.magi-market-nftdetails-image {
+	aspect-ratio: 1 / 1;
+	max-height: 320px;
+	background: var(--magi-field-bg);
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+.magi-market-nftdetails-image img { width: 100%; height: 100%; object-fit: contain; }
+.magi-market-nftdetails-image.fallback { background: var(--magi-accent-light); padding: 16%; }
+.magi-market-nftdetails-desc { color: var(--magi-text-muted); font-size: 0.9rem; margin: 0; }
+.magi-market-nftdetails-grid {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 0.35rem 0.9rem;
+	margin: 0;
+	font-size: 0.85rem;
+}
+.magi-market-nftdetails-grid dt { color: var(--magi-text-muted); }
+.magi-market-nftdetails-grid dd { margin: 0; word-break: break-all; }
+
+/* ==== Circular progress (loading) ==== */
+.magi-market-spinner-wrap {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 1.4rem 0;
+	color: var(--magi-text-muted);
+}
+.magi-market-spinner { animation: magi-market-spin 0.85s linear infinite; }
+.magi-market-spinner-track { stroke: var(--magi-border, rgba(148,163,184,0.25)); }
+.magi-market-spinner-head {
+	stroke: var(--magi-accent, #7c5cff);
+	stroke-dasharray: 56.5;
+	stroke-dashoffset: 38;
+}
+.magi-market-spinner-label { font-size: 0.8rem; letter-spacing: 0.02em; }
+
+/* ==== Tile content (listings/auctions/mint-spots cards) ==== */
+.magi-market-listing-tile { display: flex; flex-direction: column; gap: 0.3rem; }
+.magi-market-tile-sub { font-size: 0.78rem; color: var(--magi-text-muted); }
+.magi-market-tile-expiry { font-size: 0.74rem; color: var(--magi-warn, #d97706); white-space: nowrap; }
+.magi-market-tile-expiry.expired { color: var(--magi-danger, #dc2626); font-weight: 600; }
+.magi-market-tile-price {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--magi-text-primary, #e2e8f0);
+}
+.magi-market-tile-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	align-items: center;
+	margin-top: 0.25rem;
+}
+.magi-market-tile-actions .magi-market-submit { width: auto; padding: 0.35rem 0.75rem; font-size: 0.78rem; }
+.magi-market-tile-bidder {
+	font-size: 0.72rem;
+	color: var(--magi-text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	/* Tight cap so a long bidder name never pushes the Bid button to a new
+	 * line — the full name is preserved in the `data-fullname` attribute
+	 * and surfaced via the custom hover tooltip below. */
+	max-width: 9rem;
+	min-width: 0;
+	flex: 1 1 auto;
+	cursor: help;
+	position: relative;
+}
+/* Instant custom tooltip showing the full bidder name on hover/focus —
+ * native `title` has a ~1s delay and is easy to miss. Renders above the
+ * tile-actions row using absolute positioning. */
+.magi-market-tile-bidder[data-fullname]:hover::after,
+.magi-market-tile-bidder[data-fullname]:focus-visible::after {
+	content: attr(data-fullname);
+	position: absolute;
+	left: 0;
+	bottom: calc(100% + 4px);
+	padding: 0.25rem 0.5rem;
+	background: var(--magi-modal-bg, #1c1f2c);
+	border: 1px solid var(--magi-card-border, rgba(255, 255, 255, 0.15));
+	border-radius: 6px;
+	font-size: 0.72rem;
+	color: var(--magi-text, #e2e8f0);
+	white-space: nowrap;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+	z-index: 5;
+	pointer-events: none;
+}
+
+/* ==== Collection groups (collapsible per-collection sections) ==== */
+.magi-market-coll-group { margin-bottom: 1rem; }
+.magi-market-coll-header-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-bottom: 0.5rem;
+}
+.magi-market-coll-header-action { display: inline-flex; flex-shrink: 0; }
+.magi-market-coll-header {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	flex: 1;
+	min-width: 0;
+	padding: 0.5rem 0.6rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border, rgba(148,163,184,0.2));
+	border-radius: 8px;
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+}
+.magi-market-coll-header:hover { background: var(--magi-accent-light, rgba(124,92,255,0.08)); }
+.magi-market-coll-chevron { transition: transform 0.15s ease; }
+.magi-market-coll-chevron.open { transform: rotate(0deg); }
+.magi-market-coll-chevron:not(.open) { transform: rotate(-90deg); }
+.magi-market-coll-name { flex: 1; text-align: left; font-weight: 600; }
+.magi-market-coll-count {
+	font-size: 0.75rem;
+	color: var(--magi-text-muted);
+	background: var(--magi-accent-light, rgba(124,92,255,0.12));
+	padding: 0.15rem 0.5rem;
+	border-radius: 999px;
+}
+
+/* ==== Sub-tabs row (Others / Yours) with right-aligned action button ==== */
+.magi-market-subtabs-row {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 0 0.85rem;
+}
+.magi-market-subtabs {
+	display: inline-flex;
+	gap: 0.2rem;
+	padding: 0.2rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+}
+.magi-market-subtab {
+	padding: 0.3rem 0.85rem;
+	border: 0;
+	background: transparent;
+	color: var(--magi-text-muted);
+	font: inherit;
+	font-size: 0.78rem;
+	letter-spacing: 0.02em;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.magi-market-subtab:hover { color: var(--magi-text); }
+.magi-market-subtab.active {
+	background: var(--magi-accent);
+	color: #fff;
+}
+.magi-market-subtabs-action {
+	display: flex;
+	justify-content: flex-end;
+	min-height: 1px;
+}
+
+/* ==== Filter bar (date / price / payment-token / affordability) ==== */
+.magi-market-filterbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 0.8rem;
+	align-items: flex-start;
+	padding: 0.55rem 0.7rem;
+	margin: 0 0 0.75rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+}
+/* Each filter dropdown / input reuses `.magi-market-field` (the action-modal
+ * chrome — same as Sell an NFT). Constrain the width so the row wraps
+ * cleanly across breakpoints. */
+.magi-market-filterbar > .magi-market-field {
+	flex: 1 1 180px;
+	min-width: 160px;
+	margin: 0;
+}
+.magi-market-filter-toggles {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+	align-items: center;
+	margin-left: auto;
+}
+.magi-market-filter-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.78rem;
+	color: var(--magi-text-secondary);
+}
+
+/* ==== Subtabs row: action on left, sub-tabs centered, filter toggle right ==== */
+.magi-market-subtabs-action--left  { justify-content: flex-start; }
+.magi-market-subtabs-action--right { justify-content: flex-end; gap: 0.4rem; }
+
+.magi-market-filter-toggle-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--magi-field-border);
+	background: transparent;
+	color: var(--magi-text-muted);
+	cursor: pointer;
+	transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.magi-market-filter-toggle-btn:hover {
+	color: var(--magi-text);
+	border-color: var(--magi-accent, #7c5cff);
+}
+.magi-market-filter-toggle-btn.active {
+	background: var(--magi-accent, #7c5cff);
+	border-color: var(--magi-accent, #7c5cff);
+	color: #fff;
+}
+
+.magi-market-help-wrap { position: relative; display: inline-flex; }
+.magi-market-help-popover {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	z-index: 30;
+	width: 260px;
+	max-width: 70vw;
+	padding: 10px 12px;
+	border-radius: 10px;
+	border: 1px solid var(--magi-field-border, rgba(148,163,184,0.3));
+	background: var(--magi-popover-bg, #0f172a);
+	color: var(--magi-text, #e2e8f0);
+	font-size: 0.8rem;
+	line-height: 1.45;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	text-align: left;
+}

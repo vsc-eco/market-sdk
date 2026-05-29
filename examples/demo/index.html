@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Magi Market SDK — docs &amp; live demo</title>
+		<style>
+			body {
+				font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+				max-width: 1140px;
+				margin: 32px auto;
+				padding: 0 20px 80px;
+				color: #0f172a;
+				background: #f8fafc;
+				line-height: 1.55;
+			}
+			.layout {
+				display: grid;
+				grid-template-columns: 200px 1fr;
+				gap: 36px;
+				align-items: start;
+			}
+			.main {
+				/* Prevent the right column from blowing out the grid when a
+				 * pre/code block is wider than the available track. */
+				min-width: 0;
+			}
+			.toc {
+				position: sticky;
+				top: 24px;
+				font-size: 13px;
+				color: #475569;
+				max-height: calc(100vh - 48px);
+				overflow-y: auto;
+			}
+			.toc-title {
+				font-size: 10.5px;
+				font-weight: 700;
+				letter-spacing: 0.1em;
+				text-transform: uppercase;
+				color: #94a3b8;
+				margin: 0 0 10px;
+				padding-left: 10px;
+			}
+			.toc ul {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+				font-size: 13px;
+			}
+			.toc li {
+				margin: 0;
+			}
+			.toc a {
+				display: block;
+				padding: 5px 10px;
+				border-radius: 6px;
+				color: #475569;
+				text-decoration: none;
+				border-left: 2px solid transparent;
+				transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+			}
+			.toc a:hover {
+				color: #4f46e5;
+				background: rgba(79, 70, 229, 0.06);
+			}
+			.toc a.active {
+				color: #4f46e5;
+				background: rgba(79, 70, 229, 0.08);
+				border-left-color: #4f46e5;
+				font-weight: 600;
+			}
+			/* Anchor jumps land flush with the top of the viewport otherwise -
+			 * push down to clear the visual breathing room above each h2. */
+			h2 { scroll-margin-top: 28px; }
+			@media (max-width: 880px) {
+				.layout { grid-template-columns: 1fr; gap: 0; }
+				.toc { display: none; }
+			}
+			h1 {
+				font-size: 30px;
+				margin: 0 0 8px;
+				letter-spacing: -0.01em;
+			}
+			h2 {
+				font-size: 22px;
+				margin: 48px 0 12px;
+				padding-top: 8px;
+				border-top: 1px solid #e2e8f0;
+			}
+			h2:first-of-type {
+				border-top: 0;
+				padding-top: 0;
+			}
+			h3 {
+				font-size: 16px;
+				margin: 24px 0 10px;
+				color: #334155;
+			}
+			p {
+				color: #334155;
+				font-size: 14.5px;
+				margin: 0 0 14px;
+			}
+			a {
+				color: #4f46e5;
+				text-decoration: none;
+			}
+			a:hover {
+				text-decoration: underline;
+			}
+			ul {
+				color: #334155;
+				font-size: 14.5px;
+				padding-left: 20px;
+				margin: 0 0 16px;
+			}
+			ul li {
+				margin: 4px 0;
+			}
+			.intro {
+				color: #475569;
+				font-size: 16px;
+				margin: 0 0 24px;
+			}
+			code {
+				background: #e2e8f0;
+				padding: 1px 6px;
+				border-radius: 4px;
+				font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 13px;
+			}
+			h2 code,
+			h3 code {
+				background: transparent;
+				padding: 0;
+			}
+			pre.code {
+				background: #0f172a;
+				color: #e2e8f0;
+				padding: 14px 18px;
+				border-radius: 10px;
+				font-family: 'Noto Sans Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 12.5px;
+				line-height: 1.6;
+				overflow-x: auto;
+				white-space: pre;
+				margin: 0 0 18px;
+				border: 1px solid #1e293b;
+			}
+			pre.code .kw { color: #c4b5fd; }
+			pre.code .str { color: #86efac; }
+			pre.code .num { color: #fda4af; }
+			pre.code .com { color: #64748b; font-style: italic; }
+			pre.code .fn { color: #93c5fd; }
+			pre.code .typ { color: #fde68a; }
+			.callout {
+				background: #fef3c7;
+				border-left: 3px solid #f59e0b;
+				padding: 10px 14px;
+				border-radius: 4px;
+				font-size: 13.5px;
+				color: #78350f;
+				margin: 0 0 16px;
+			}
+			/* ==== Wallet bar - primary CTA at the top of the page ==== */
+			.wallet-bar {
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 18px 22px;
+				border-radius: 14px;
+				margin: 0 0 16px;
+				border: 1px solid transparent;
+				transition: background-color 0.15s ease, border-color 0.15s ease;
+			}
+			.wallet-bar.disconnected {
+				background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+				border-color: #c7d2fe;
+				box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+			}
+			.wallet-bar.connected {
+				background: #f0fdf4;
+				border-color: #bbf7d0;
+			}
+			.wallet-bar-icon {
+				width: 44px;
+				height: 44px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+			}
+			.wallet-bar.disconnected .wallet-bar-icon {
+				background: #fff;
+				border: 1px solid #c7d2fe;
+				color: #4f46e5;
+			}
+			.wallet-bar.connected .wallet-bar-icon {
+				background: #fff;
+				border: 1px solid #86efac;
+				color: #16a34a;
+			}
+			.wallet-bar-body {
+				flex: 1;
+				min-width: 0;
+			}
+			.wallet-bar-title {
+				font-size: 16px;
+				font-weight: 600;
+				color: #0f172a;
+				line-height: 1.3;
+			}
+			.wallet-bar-title code {
+				background: rgba(255, 255, 255, 0.6);
+				font-size: 14px;
+			}
+			.wallet-bar-sub {
+				font-size: 13px;
+				color: #475569;
+				margin-top: 4px;
+			}
+			.wallet-bar-sub a {
+				color: #4f46e5;
+			}
+			.wallet-bar-sub code {
+				background: rgba(255, 255, 255, 0.6);
+				font-size: 12px;
+			}
+			.wallet-bar-actions {
+				display: flex;
+				gap: 8px;
+				flex-wrap: wrap;
+				flex-shrink: 0;
+				align-items: center;
+			}
+			.wallet-bar-actions input {
+				padding: 9px 12px;
+				border-radius: 8px;
+				border: 1px solid #c7d2fe;
+				background: #fff;
+				color: #0f172a;
+				font: inherit;
+				font-size: 14px;
+			}
+			.wallet-bar-actions button {
+				padding: 9px 18px;
+				border: 1px solid #c7d2fe;
+				background: #fff;
+				border-radius: 8px;
+				cursor: pointer;
+				font-size: 14px;
+				font-family: inherit;
+				font-weight: 500;
+				transition: background-color 0.15s ease, transform 0.05s ease;
+			}
+			.wallet-bar-actions button:hover {
+				background: #f1f5f9;
+			}
+			.wallet-bar-actions button:active {
+				transform: translateY(1px);
+			}
+			.wallet-bar-actions button.primary {
+				background: #4f46e5;
+				color: #fff;
+				border-color: #4f46e5;
+				box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
+				font-weight: 600;
+			}
+			.wallet-bar-actions button.primary:hover {
+				background: #4338ca;
+				border-color: #4338ca;
+			}
+			.wallet-bar-actions button:disabled {
+				opacity: 0.6;
+				cursor: default;
+			}
+			.theme-row {
+				display: flex;
+				gap: 8px;
+				margin: 0 0 28px;
+				font-size: 13px;
+				align-items: center;
+			}
+			.theme-row button {
+				padding: 4px 10px;
+				border: 1px solid #c7d2fe;
+				background: #fff;
+				border-radius: 6px;
+				cursor: pointer;
+				font-family: inherit;
+				font-size: 13px;
+			}
+			.theme-row button.active {
+				background: #4f46e5;
+				color: #fff;
+				border-color: #4f46e5;
+			}
+			.live {
+				background: #fff;
+				border: 1px solid #e2e8f0;
+				border-radius: 12px;
+				padding: 18px;
+				margin: 0 0 24px;
+				position: relative;
+			}
+			.live::before {
+				content: 'live';
+				position: absolute;
+				top: -10px;
+				left: 16px;
+				background: #16a34a;
+				color: #fff;
+				font-size: 10px;
+				font-weight: 700;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				padding: 2px 8px;
+				border-radius: 4px;
+			}
+			.pill {
+				display: inline-block;
+				font-size: 11px;
+				font-weight: 700;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				padding: 2px 8px;
+				border-radius: 999px;
+				margin-left: 8px;
+				vertical-align: middle;
+			}
+			.pill.widget { background: #ede9fe; color: #6d28d9; }
+			.pill.headless { background: #dbeafe; color: #1d4ed8; }
+			body[data-theme='dark'] {
+				background: #0a0e14;
+				color: #e5e7eb;
+			}
+			body[data-theme='dark'] h1,
+			body[data-theme='dark'] h2,
+			body[data-theme='dark'] h3 { color: #f9fafb; }
+			body[data-theme='dark'] h2 { border-top-color: #2a3142; }
+			body[data-theme='dark'] p,
+			body[data-theme='dark'] ul { color: #cbd5e1; }
+			body[data-theme='dark'] .intro { color: #9ca3af; }
+			body[data-theme='dark'] code { background: #1e293b; color: #e2e8f0; }
+			body[data-theme='dark'] .toc-title { color: #6b7280; }
+			body[data-theme='dark'] .toc a { color: #9ca3af; }
+			body[data-theme='dark'] .toc a:hover {
+				color: #a5b4fc;
+				background: rgba(99, 102, 241, 0.12);
+			}
+			body[data-theme='dark'] .toc a.active {
+				color: #a5b4fc;
+				background: rgba(99, 102, 241, 0.18);
+				border-left-color: #818cf8;
+			}
+			body[data-theme='dark'] .callout { background: rgba(245, 158, 11, 0.1); color: #fcd34d; }
+			body[data-theme='dark'] .wallet-bar.disconnected {
+				background: linear-gradient(135deg, #1a1d3a 0%, #1e2050 100%);
+				border-color: #4338ca;
+			}
+			body[data-theme='dark'] .wallet-bar.connected {
+				background: #0a2e1f;
+				border-color: #166534;
+			}
+			body[data-theme='dark'] .wallet-bar-title { color: #f9fafb; }
+			body[data-theme='dark'] .wallet-bar-title code,
+			body[data-theme='dark'] .wallet-bar-sub code { background: rgba(0, 0, 0, 0.3); }
+			body[data-theme='dark'] .wallet-bar-sub { color: #9ca3af; }
+			body[data-theme='dark'] .wallet-bar-icon {
+				background: #0f172a !important;
+			}
+			body[data-theme='dark'] .wallet-bar-actions input {
+				background: #0f172a;
+				border-color: #334155;
+				color: #e2e8f0;
+			}
+			body[data-theme='dark'] .wallet-bar-actions button {
+				background: #0f172a;
+				border-color: #334155;
+				color: #e2e8f0;
+			}
+			body[data-theme='dark'] .wallet-bar-actions button.primary {
+				background: #6366f1;
+				border-color: #6366f1;
+			}
+			body[data-theme='dark'] .live { background: #1a1f2e; border-color: #2a3142; }
+			body[data-theme='dark'] .pill.widget { background: rgba(124, 58, 237, 0.2); color: #c4b5fd; }
+			body[data-theme='dark'] .pill.headless { background: rgba(37, 99, 235, 0.2); color: #93c5fd; }
+		</style>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

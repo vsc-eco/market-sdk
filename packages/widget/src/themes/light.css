@@ -1,0 +1,29 @@
+/* Light theme. Usage:
+     import '@vsc.eco/token-widget/themes/light.css';
+     <MagiAssets className="magi-market-light-host" ... />
+   The widget defaults to Altera dark. Add the `magi-market-light-host`
+   class on the panel (or any ancestor) to flip a single panel light
+   without affecting the rest of your app. */
+
+.magi-market.magi-market-light-host {
+	--magi-card-bg: #ffffff;
+	--magi-modal-bg: #ffffff;
+	--magi-card-border: #e2e5e9;
+	--magi-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+	--magi-accent: #4f46e5;
+	--magi-accent-hover: #4338ca;
+	--magi-accent-light: rgba(79, 70, 229, 0.08);
+	--magi-green: #16a34a;
+	--magi-red: #dc2626;
+	--magi-text: #111827;
+	--magi-text-secondary: #4b5563;
+	--magi-text-muted: #9ca3af;
+	--magi-field-bg: #f3f4f6;
+	--magi-field-border: #e5e7eb;
+	--magi-tile-bg: #ffffff;
+	--magi-tile-bg-hover: #f9fafb;
+	--magi-font: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* MarketPanel rows — light theme */
+.magi-market-light .magi-market-row { border-color:#e2e8f0; }

@@ -1,0 +1,47 @@
+{
+  "name": "@vsc.eco/market-core",
+  "version": "0.0.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "Magi (VSC) NFT-marketplace operation builders and types — pure functions, no framework dependencies",
+  "keywords": [
+    "hive",
+    "vsc",
+    "magi",
+    "nft",
+    "marketplace",
+    "erc1155",
+    "auction"
+  ],
+  "homepage": "https://github.com/vsc-eco/market-sdk/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vsc-eco/market-sdk.git",
+    "directory": "packages/core"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.5",
+    "vitest": "^2.1.8"
+  }
+}
