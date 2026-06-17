@@ -58,8 +58,8 @@
     "@vsc.eco/market-core": "workspace:*",
     "@vsc.eco/market-sdk": "workspace:*",
     "@r2wc/react-to-web-component": "^2.0.3",
-    "@vsc.eco/token-core": "link:../../../nft-sdk/packages/core",
-    "@vsc.eco/token-sdk": "link:../../../nft-sdk/packages/sdk"
+    "@vsc.eco/token-core": "^0.0.2",
+    "@vsc.eco/token-sdk": "^0.0.2"
   },
   "devDependencies": {
     "@aioha/aioha": "^1.8.2",
