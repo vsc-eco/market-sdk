@@ -6,12 +6,23 @@
     "build": "pnpm -r --filter './packages/*' run build",
     "test": "pnpm -r --filter './packages/*' run test",
     "typecheck": "pnpm -r --filter './packages/*' --filter './examples/*' run typecheck",
-    "demo": "pnpm --filter demo run dev"
+    "demo": "pnpm --filter demo run dev",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && pnpm publish -r --no-git-checks"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
+    "@changesets/cli": "^2.27.9",
     "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@11.1.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "core-js",
+      "esbuild",
+      "secp256k1"
+    ]
+  }
 }
