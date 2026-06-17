@@ -98,11 +98,11 @@ importers:
         specifier: workspace:*
         version: link:../sdk
       '@vsc.eco/token-core':
-        specifier: link:../../../nft-sdk/packages/core
-        version: link:../../../nft-sdk/packages/core
+        specifier: ^0.0.2
+        version: 0.0.2
       '@vsc.eco/token-sdk':
-        specifier: link:../../../nft-sdk/packages/sdk
-        version: link:../../../nft-sdk/packages/sdk
+        specifier: ^0.0.2
+        version: 0.0.2
     devDependencies:
       '@aioha/aioha':
         specifier: ^1.8.2
@@ -943,6 +943,12 @@ packages:
 
   '@vitest/utils@2.1.9':
     resolution: {integrity: sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ==}
+
+  '@vsc.eco/token-core@0.0.2':
+    resolution: {integrity: sha512-5JBi2aLyfrsNcK/8ff/Fi8E8cLP+oAfJIn4FBwIjderVqlFb53a3m9R5lDZaxBVmGrq1sTuaMrwgcfX3CEvBag==}
+
+  '@vsc.eco/token-sdk@0.0.2':
+    resolution: {integrity: sha512-hNfTvhyORcFLJb5qkhVbjjrWFsWBGYWyS37HSDYBls2IMQK0lh/qRjsukfykF+A7N4XjHEiaNu7CVWwrNQ+CCg==}
 
   acorn@8.16.0:
     resolution: {integrity: sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==}
@@ -2872,6 +2878,12 @@ snapshots:
       '@vitest/pretty-format': 2.1.9
       loupe: 3.2.1
       tinyrainbow: 1.2.0
+
+  '@vsc.eco/token-core@0.0.2': {}
+
+  '@vsc.eco/token-sdk@0.0.2':
+    dependencies:
+      '@vsc.eco/token-core': 0.0.2
 
   acorn@8.16.0: {}
 
