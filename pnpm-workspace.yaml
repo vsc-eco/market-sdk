@@ -1,7 +1,11 @@
 packages:
   - 'packages/*'
   - 'examples/*'
+
+# pnpm 11 approval for dependency build/install scripts.
+# esbuild fetches its platform binary; secp256k1 compiles a native addon;
+# core-js runs a (harmless) postinstall notice.
 allowBuilds:
-  core-js: set this to true or false
-  esbuild: set this to true or false
-  secp256k1: set this to true or false
+  core-js: true
+  esbuild: true
+  secp256k1: true
