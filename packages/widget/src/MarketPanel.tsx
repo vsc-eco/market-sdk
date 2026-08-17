@@ -49,13 +49,80 @@ import {
 } from './components/useChainClock.js';
 import { FilterBar, DEFAULT_FILTERS, type FilterState } from './components/FilterBar.js';
 import { useUserBalances } from './components/useUserBalances.js';
-import { CollectionGroup } from './components/CollectionGroup.js';
+import { useUserNftHoldings } from './components/useUserNftHoldings.js';
+import { useAllNfts } from './components/useAllNfts.js';
+import { useTemplateLinks } from './components/useTemplateLinks.js';
+import { useElementWidth } from './components/useElementWidth.js';
+import { CollectionGroup, TemplateGroup, bareAccount } from './components/CollectionGroup.js';
 import { useNftImages } from './components/useNftImages.js';
 
-/** Group items sharing an `nftContract` so listings/auctions/mint-spots
- *  render as per-collection sections with named headers. */
+/**
+ * Explore page size. Holdings are paged rather than capped: every match is
+ * reachable via "Load more", nothing is silently dropped.
+ *
+ * 40 also keeps each image-resolution round inside the node's ~100-key
+ * `getStateByKeys` limit — `useNftImages` only fetches the newly revealed
+ * items, so one page of tokens plus their templates stays well under it.
+ */
+const EXPLORE_PAGE = 40;
+
+/**
+ * Panel width at which Explore switches from the stacked accordion to the
+ * two-pane collection-list/detail layout. Below this the sidebar plus a
+ * useful tile grid don't both fit, so the stacked design wins.
+ *
+ * Measured on the PANEL, not the viewport — see `useElementWidth`. Note the
+ * panel is `max-width: 720px`, so this must sit below that or the split
+ * layout can never engage; at 720 the detail pane still gets ~440px, three
+ * tile columns.
+ */
+const EXPLORE_SPLIT_AT = 640;
+
+/**
+ * Panel width below which the sub-tabs row stacks: the tab action ("Sell an
+ * NFT" + "Sweep") moves to its own row above the Others/Yours pills. One line
+ * for action + pills + filter/help icons needs roughly 460px of content, so
+ * this leaves headroom over the panel's 1.25rem side padding.
+ *
+ * Measured on the panel (see `useElementWidth`) rather than the viewport,
+ * because the previous viewport-gated version missed the case this is for:
+ * a phone-width column inside a wider page, and any narrow embed.
+ */
+const SUBTABS_STACK_AT = 560;
+
+/**
+ * One NFT on the Explore view: a token plus everyone who holds it. Explore
+ * is token-shaped rather than holding-shaped because a magi-market offer is
+ * an OPEN bid on `(nftContract, tokenId)` that any holder may accept — there
+ * is no way to direct one at a specific account.
+ */
+interface ExploreToken {
+	nftContract: string;
+	tokenId: string;
+	soulbound: boolean;
+	/** Every holder, `hive:…`; marketplace escrow excluded. */
+	holders: string[];
+	/** Units in circulation across those holders. */
+	totalUnits: bigint;
+	/** How many of those units the connected user holds. */
+	myUnits: bigint;
+	/** Whether the collection owner is among the holders (soulbound gate). */
+	ownerHolds: boolean;
+}
+
+/**
+ * Group items sharing an `nftContract` so listings/auctions/mint-spots render
+ * as per-collection sections with named headers.
+ *
+ * Pass `nameOf` (i.e. `collMeta.name`) to order the groups alphabetically by
+ * display name. Without it groups come out in whatever order the rows
+ * arrived, which for indexer reads is contract-id order — stable, but
+ * meaningless to a reader. Compared case- and accent-insensitively with
+ * `numeric` so "Series 2" sorts before "Series 10".
+ */
 function groupByContract<T extends { nftContract: string }>(
-	items: T[]
+	items: T[],
+	nameOf?: (contractId: string) => string
 ): Array<{ contractId: string; items: T[] }> {
 	const map = new Map<string, T[]>();
 	for (const it of items) {
@@ -63,7 +130,16 @@ function groupByContract<T extends { nftContract: string }>(
 		arr.push(it);
 		map.set(it.nftContract, arr);
 	}
-	return Array.from(map, ([contractId, list]) => ({ contractId, items: list }));
+	const groups = Array.from(map, ([contractId, list]) => ({ contractId, items: list }));
+	if (nameOf) {
+		groups.sort((a, b) =>
+			nameOf(a.contractId).localeCompare(nameOf(b.contractId), undefined, {
+				sensitivity: 'base',
+				numeric: true
+			})
+		);
+	}
+	return groups;
 }
 
 export interface MagiMarketPanelProps {
@@ -85,6 +161,17 @@ export interface MagiMarketPanelProps {
 
 type Tab = 'listings' | 'offers' | 'auctions' | 'mintspots' | 'tokens' | 'bundles' | 'swaps' | 'rentals';
 
+/**
+ * Top-level section, one level ABOVE the market tabs. "Market" is every
+ * order-book view (the `Tab` strip); "Explore" browses the whole NFT
+ * population, listed or not. Explore isn't a market view, so it sits beside
+ * the panel header rather than inside the tab strip.
+ */
+type Section = 'market' | 'explore';
+
+const EXPLORE_HELP =
+	'Every NFT on the network and who currently holds it, grouped by collection and then by mint template — including tokens nobody has listed for sale. Make an offer on anything you see to ask its holder to sell, or list one of your own.';
+
 /** Two-sentence explainer per tab: what it is + what you can do here.
  *  Shown by the (?) popover next to the filter toggle. */
 const TAB_HELP: Record<Tab, string> = {
@@ -98,7 +185,9 @@ const TAB_HELP: Record<Tab, string> = {
 	swaps: 'Trade one NFT directly for another, optionally with a token top-up. Propose a swap, or accept one proposed to you.'
 };
 type Sheet =
-	| { kind: 'sell' }
+	// `nftContract`/`tokenId` prefill the form when the sheet is opened from
+	// a specific NFT (the Explore tab) rather than from the toolbar.
+	| { kind: 'sell'; nftContract?: string; tokenId?: string }
 	| { kind: 'auction' }
 	| { kind: 'mintspots' }
 	| { kind: 'sellToken' }
@@ -116,7 +205,7 @@ type Sheet =
 	| { kind: 'listRental' }
 	| { kind: 'rent'; rental: RentalListing }
 	| { kind: 'admin'; nftContract?: string }
-	| { kind: 'offer'; listing?: Listing }
+	| { kind: 'offer'; listing?: Listing; nftContract?: string; tokenId?: string }
 	| { kind: 'nftDetails'; nftContract: string; tokenId: string }
 	| null;
 
@@ -219,6 +308,34 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const chainClock = useChainClock(client);
 
 	const [tab, setTab] = useState<Tab>('listings');
+	// The tab strip is a horizontal scroller once the tabs stop fitting (see
+	// `.magi-market-tabs`), so a tab selected from elsewhere — or simply one
+	// past the fold — can sit off-screen. Centre the active one.
+	const tabsRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const strip = tabsRef.current;
+		const active = strip?.querySelector<HTMLElement>('.magi-market-tab.active');
+		if (!strip || !active) return;
+		// Deliberately NOT scrollIntoView: that would also scroll the host
+		// page vertically to the widget on mount. Only ever touch the strip's
+		// own scrollLeft — a no-op when the tabs already fit.
+		const left = active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2;
+		strip.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+	}, [tab]);
+	// Top-level section, above the tab strip — see `Section`.
+	const [section, setSection] = useState<Section>('market');
+	// Explore's layout follows the PANEL's width, not the viewport's, so an
+	// embed in a narrow column gets the stacked design even on a wide screen.
+	const rootRef = useRef<HTMLDivElement>(null);
+	const panelWidth = useElementWidth(rootRef);
+	const exploreSplit = panelWidth >= EXPLORE_SPLIT_AT;
+	// `panelWidth === 0` means "not measured yet", and the stacked row is the
+	// one that can't overflow — so treat unknown as narrow. Worst case a wide
+	// panel shows the stacked row for a single frame; the alternative is a
+	// frame of horizontal overflow on every phone.
+	const isNarrow = panelWidth < SUBTABS_STACK_AT;
+	/** Selected collection in the split layout; null = fall back to the first. */
+	const [exploreColl, setExploreColl] = useState<string | null>(null);
 	// Sub-scope inside each tab: "others" = items NOT owned by the user
 	// (the marketplace browsing view), "yours" = items the user themselves
 	// listed/seeded. "others" first matches the marketplace-first mindset.
@@ -237,6 +354,172 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	// `${kind}:${id}` of the listing currently being cancelled (delisted).
 	const [canceling, setCanceling] = useState<string | null>(null);
 
+	// The connected `username` is bare (`tibfox`) while the indexer stores
+	// accounts prefixed (`hive:tibfox`), so a raw `===` never matched and
+	// users could buy/offer on their own listings. Normalize both sides.
+	// Declared up here because the Explore memos below need it, and those in
+	// turn feed `visibleNftItems`.
+	const acctNorm = (s?: string) =>
+		(s ?? '').trim().replace(/^@/, '').replace(/^hive:/, '').toLowerCase();
+	const me = acctNorm(username);
+	const isSelf = (account?: string) => !!me && acctNorm(account) === me;
+
+	// ---- Explore: the whole NFT population, listed or not ----
+	// Both reads are gated on the section being open so their paged indexer
+	// requests don't run for everyone browsing the market tabs.
+	const allNfts = useAllNfts(config, section === 'explore');
+	const templates = useTemplateLinks(config, section === 'explore');
+	const [exploreQuery, setExploreQuery] = useState('');
+
+	// Aggregate the holdings into ONE ROW PER TOKEN, not per (token, holder).
+	//
+	// This matters beyond de-duplication: a magi-market offer targets
+	// `(nftContract, tokenId)` and *any* holder may accept it — `MakeOfferPayload`
+	// has no seller field and `doAcceptOffer` only bars the buyer themselves.
+	// Rendering a tile per holder therefore showed, for a token held by 35
+	// accounts, 35 "Make offer" buttons that all created the identical open
+	// offer, and implied you were bidding on one specific person's copy.
+	//
+	// Marketplace-escrowed balances (`contract:<market>`) are excluded from the
+	// holder list: they're auction/rental collateral mid-flight, not somebody's
+	// holding.
+	const exploreTokens = useMemo(() => {
+		const byToken = new Map<
+			string,
+			{
+				nftContract: string;
+				tokenId: string;
+				soulbound: boolean;
+				holders: string[];
+				totalUnits: bigint;
+				myUnits: bigint;
+			}
+		>();
+		for (const h of allNfts.holdings) {
+			if (h.account.startsWith('contract:')) continue;
+			const k = `${h.nftContract}:${h.tokenId}`;
+			const row = byToken.get(k) ?? {
+				nftContract: h.nftContract,
+				tokenId: h.tokenId,
+				soulbound: h.soulbound,
+				holders: [] as string[],
+				totalUnits: 0n,
+				myUnits: 0n
+			};
+			row.holders.push(h.account);
+			row.totalUnits += h.balance;
+			if (isSelf(h.account)) row.myUnits += h.balance;
+			byToken.set(k, row);
+		}
+		// Own holdings first within a collection, then by id — your inventory is
+		// what you're most likely to act on.
+		return Array.from(byToken.values()).map((t) => ({
+			...t,
+			// Soulbound tokens can only move while the COLLECTION OWNER holds
+			// them, whoever else is holding.
+			ownerHolds: t.holders.some((a) => acctNorm(a) === acctNorm(collMeta.owner(t.nftContract)))
+		}));
+	}, [allNfts.holdings, me, collMeta]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// Scope means holder: "others" = a token someone else holds (what you'd
+	// offer on), "yours" = tokens you hold. A token held by both you and
+	// others appears in both, because both actions are real. With nobody
+	// connected `isSelf` is always false, so "others" shows everything — the
+	// right default for browsing without signing in.
+	const exploreScoped = useMemo(
+		() =>
+			exploreTokens.filter((t) =>
+				scope === 'yours' ? t.myUnits > 0n : t.holders.some((a) => !isSelf(a))
+			),
+		[exploreTokens, scope, me] // eslint-disable-line react-hooks/exhaustive-deps
+	);
+
+	// Search spans token id, any holder, collection name/id and template id,
+	// so "alicante", "tibfox" and a collection name all find something.
+	const exploreFiltered = useMemo(() => {
+		const q = exploreQuery.trim().toLowerCase();
+		if (!q) return exploreScoped;
+		return exploreScoped.filter((t) => {
+			const tpl = templates.templateOf(t.nftContract, t.tokenId);
+			return (
+				t.tokenId.toLowerCase().includes(q) ||
+				t.holders.some((a) => a.toLowerCase().includes(q)) ||
+				t.nftContract.toLowerCase().includes(q) ||
+				collMeta.name(t.nftContract).toLowerCase().includes(q) ||
+				(tpl ? tpl.toLowerCase().includes(q) : false)
+			);
+		});
+	}, [exploreScoped, exploreQuery, templates, collMeta]);
+
+	// Paged, not capped — everything is reachable via "Load more".
+	//
+	// Paged PER COLLECTION rather than over the flat list: on testnet one
+	// collection holds 1022 of 1052 holdings, so a flat first page was 40
+	// tiles from that single collection and every other collection looked
+	// missing. Per-collection paging shows all collections immediately and
+	// grows the one you're actually reading.
+	const [exploreShownByColl, setExploreShownByColl] = useState<Record<string, number>>({});
+	const shownCountFor = (contractId: string) => exploreShownByColl[contractId] ?? EXPLORE_PAGE;
+
+	// A new search or scope must not keep deep pages — switching to a
+	// 3-result search should not still render as though 400 rows were asked
+	// for.
+	useEffect(() => {
+		setExploreShownByColl({});
+	}, [exploreQuery, scope]);
+
+	// Collection group → template sub-group. Tokens minted from the same
+	// template are near-identical, so folding them under one collapsed
+	// sub-header keeps a long grid readable; tokens with no template render
+	// directly in the collection group.
+	const exploreGroups = useMemo(() => {
+		return groupByContract(exploreFiltered, collMeta.name).map((g) => {
+			const shown = g.items.slice(0, shownCountFor(g.contractId));
+			const loose: ExploreToken[] = [];
+			const byTemplate = new Map<string, ExploreToken[]>();
+			for (const h of shown) {
+				const tpl = templates.templateOf(h.nftContract, h.tokenId);
+				if (!tpl) {
+					loose.push(h);
+					continue;
+				}
+				const list = byTemplate.get(tpl) ?? [];
+				list.push(h);
+				byTemplate.set(tpl, list);
+			}
+			return {
+				contractId: g.contractId,
+				total: g.items.length,
+				shownCount: shown.length,
+				shown,
+				loose,
+				templateGroups: Array.from(byTemplate, ([templateId, items]) => ({ templateId, items })).sort(
+					(a, b) => a.templateId.localeCompare(b.templateId)
+				)
+			};
+		});
+	}, [exploreFiltered, templates, exploreShownByColl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	/** Every holding currently rendered, across all collection groups. */
+	/**
+	 * The collection whose contents the split layout is showing. Falls back to
+	 * the first group so the detail pane is never blank, and self-heals when
+	 * the selected collection drops out of the current search/scope.
+	 */
+	const exploreActiveGroup = useMemo(() => {
+		if (exploreGroups.length === 0) return null;
+		return exploreGroups.find((g) => g.contractId === exploreColl) ?? exploreGroups[0];
+	}, [exploreGroups, exploreColl]);
+
+	/** Holdings actually on screen — only the open collection in split mode. */
+	const exploreShown = useMemo(
+		() =>
+			exploreSplit
+				? exploreActiveGroup?.shown ?? []
+				: exploreGroups.flatMap((g) => g.shown),
+		[exploreGroups, exploreSplit, exploreActiveGroup]
+	);
+
 	// Items for the currently visible tab — passed to the image resolver
 	// so we only fetch images for NFTs actually shown on this tab. Token
 	// listings are ERC-20s so they're excluded (no image to resolve).
@@ -251,7 +534,25 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		if (tab === 'rentals') return rentals.map((r) => ({ nftContract: r.nftContract, tokenId: r.tokenId }));
 		return [];
 	}, [tab, listings, offers, auctions, mintSpots, rentals]);
-	const nftImages = useNftImages(config, visibleNftItems);
+
+	// Explore resolves images for exactly the page that's rendered, deduped
+	// by token (the same token held by two accounts is two tiles, one image).
+	// `useNftImages` caches and chunks, so paging in adds one small request.
+	const exploreNftItems = useMemo<Array<{ nftContract: string; tokenId: string }>>(() => {
+		const seen = new Set<string>();
+		const out: Array<{ nftContract: string; tokenId: string }> = [];
+		for (const h of exploreShown) {
+			const k = `${h.nftContract}:${h.tokenId}`;
+			if (seen.has(k)) continue;
+			seen.add(k);
+			out.push({ nftContract: h.nftContract, tokenId: h.tokenId });
+		}
+		return out;
+	}, [exploreShown]);
+	const nftImages = useNftImages(
+		config,
+		section === 'explore' ? exploreNftItems : visibleNftItems
+	);
 
 	const load = useCallback(async () => {
 		setLoading(true);
@@ -320,15 +621,139 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		onSuccess?.(tx);
 		setSheet(null);
 		void load();
+		// An accept/sale moved an NFT out of the wallet — re-read holdings so
+		// the offers tab stops offering to accept with a token now gone, and
+		// Explore stops attributing it to the previous holder.
+		nftHoldings.refresh();
+		allNfts.refresh();
 	};
 
-	// The connected `username` is bare (`tibfox`) while the indexer stores
-	// the seller prefixed (`hive:tibfox`), so a raw `===` never matched and
-	// users could buy/offer on their own listings. Normalize both sides.
-	const acctNorm = (s?: string) =>
-		(s ?? '').trim().replace(/^@/, '').replace(/^hive:/, '').toLowerCase();
-	const me = acctNorm(username);
-	const isSelf = (account?: string) => !!me && acctNorm(account) === me;
+	// `acctNorm` / `me` / `isSelf` are declared above the Explore memos, which
+	// need them before `visibleNftItems` runs.
+
+	/**
+	 * One Explore tile — a token and everyone holding it. Shared by the loose
+	 * grid and the per-template sub-groups so both render identically.
+	 *
+	 * The holder line is informational, NOT a target: an offer is open to
+	 * every holder of the token (see `ExploreToken`), so the copy says "offer
+	 * to any holder" rather than naming one.
+	 *
+	 * Soulbound tokens can only move while the collection owner holds them
+	 * (magi_nft's `safeTransferFrom` aborts unless `from == ownerAddr`), so an
+	 * offer on one held only by others is unfulfillable — say so rather than
+	 * offer a button that leads to a failing accept.
+	 */
+	const renderExploreTile = (t: ExploreToken) => {
+		const others = t.holders.filter((a) => !isSelf(a));
+		const stuck = t.soulbound && !t.ownerHolds;
+		// "you", "alice", "you +3", "alice +34". The space before "+N" is
+		// non-breaking so the count never gets orphaned onto its own line —
+		// the tile is ~160px wide, so "held by" wraps away from the name and a
+		// lone "+34" underneath read as a separate fact. `overflow-wrap:
+		// anywhere` on the class still breaks a name too long to fit at all.
+		const holderLine = (() => {
+			const lead = t.myUnits > 0n ? 'you' : others[0]?.replace(/^hive:/, '') ?? 'nobody';
+			const rest = t.holders.length - 1;
+			return rest > 0 ? `${lead}\u00A0+${rest}` : lead;
+		})();
+		return (
+			<MarketTile
+				key={`${t.nftContract}:${t.tokenId}`}
+				imageUrl={nftImages.get(t.nftContract, t.tokenId)}
+				tokenId={t.tokenId}
+				subtitle={
+					<>
+						×{t.totalUnits.toString()}
+						{t.myUnits > 0n && t.myUnits !== t.totalUnits ? ` (${t.myUnits} yours)` : ''}
+						{t.soulbound ? ' · soulbound' : ''}
+					</>
+				}
+				price={
+					<span
+						className="magi-market-tile-holder"
+						title={t.holders.map((a) => a.replace(/^hive:/, '')).join(', ')}
+					>
+						held by {holderLine}
+					</span>
+				}
+				onOpen={() => setSheet({ kind: 'nftDetails', nftContract: t.nftContract, tokenId: t.tokenId })}
+				actions={
+					stuck ? (
+						<span className="magi-market-field-hint">
+							Soulbound — only the collection owner can transfer it
+						</span>
+					) : t.myUnits > 0n ? (
+						<button type="button" className="magi-market-submit ghost"
+							disabled={!username}
+							onClick={() => setSheet({ kind: 'sell', nftContract: t.nftContract, tokenId: t.tokenId })}>
+							List for sale
+						</button>
+					) : (
+						<button type="button" className="magi-market-submit"
+							disabled={!username}
+							title={
+								!username
+									? 'Connect a wallet to make an offer'
+									: t.holders.length > 1
+										? `Open offer — any of the ${t.holders.length} holders can accept it`
+										: 'Open offer — the holder can accept it'
+							}
+							onClick={() => setSheet({ kind: 'offer', nftContract: t.nftContract, tokenId: t.tokenId })}>
+							{/* "any holder" only says something when there IS more than
+							    one; on a single-holder token it's just noise. */}
+							{t.holders.length > 1 ? 'Offer to any holder' : 'Make offer'}
+						</button>
+					)
+				}
+			/>
+		);
+	};
+
+	/**
+	 * The contents of one Explore collection: any template-less tokens, then a
+	 * sub-group per mint template, then its own "Load more". Shared verbatim by
+	 * the stacked accordion and the split layout's detail pane.
+	 */
+	const renderExploreGroupBody = (g: (typeof exploreGroups)[number]) => (
+		<>
+			{g.loose.length > 0 && (
+				<div className="magi-market-grid">{g.loose.map((t) => renderExploreTile(t))}</div>
+			)}
+			{g.templateGroups.map((tg) => (
+				<TemplateGroup
+					key={tg.templateId}
+					templateId={tg.templateId}
+					count={tg.items.length}
+					// Open on its own when it's the only thing in the collection —
+					// collapsing a single result reads as "no results".
+					defaultOpen={g.templateGroups.length === 1 && g.loose.length === 0}
+				>
+					{tg.items.map((t) => renderExploreTile(t))}
+				</TemplateGroup>
+			))}
+			{g.shownCount < g.total && (
+				<div className="magi-market-loadmore">
+					<span className="magi-market-row-sub">
+						Showing {g.shownCount} of {g.total}
+					</span>
+					<button
+						type="button"
+						className="magi-market-submit ghost"
+						style={{ width: 'auto' }}
+						onClick={() =>
+							setExploreShownByColl((m) => ({
+								...m,
+								[g.contractId]: shownCountFor(g.contractId) + EXPLORE_PAGE
+							}))
+						}
+					>
+						Load more
+					</button>
+				</div>
+			)}
+		</>
+	);
 
 	// Collection-owner settings gear, shown in a collection group's header
 	// only when the connected user owns that collection. Opens the admin
@@ -381,6 +806,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		return () => document.removeEventListener('mousedown', onDoc);
 	}, [helpOpen]);
 	const balances = useUserBalances(config, username);
+	// Seller-side gate for the offers tab: you can only fulfil an offer for
+	// an NFT you actually hold.
+	const nftHoldings = useUserNftHoldings(config, username);
 
 	// Common predicate applied to listings/auctions/mintspots/token sales.
 	// `kind` is the source so we can read the right price field; auctions
@@ -541,59 +969,122 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	];
 
 	return (
-		<div className={`magi-market${bare ? ' bare' : ''} ${className ?? ''}`}>
-			{enableRefresh && <RefreshButton refreshing={loading} onClick={() => void load()} />}
+		<div
+			ref={rootRef}
+			className={`magi-market${bare ? ' bare' : ''}${isNarrow ? ' is-narrow' : ''} ${className ?? ''}`}
+		>
+			{enableRefresh && (
+				<RefreshButton
+					refreshing={loading}
+					onClick={() => {
+						void load();
+						nftHoldings.refresh();
+						if (section === 'explore') allNfts.refresh();
+					}}
+				/>
+			)}
 
 			{!hideHeader && (
 				<div className="magi-market-header">
 					<div className="magi-market-badge">
 						<span className="magi-market-dot" />
-						<span className="magi-market-badge-text">MAGI MARKET</span>
+						<span className="magi-market-badge-text">
+							{section === 'explore' ? 'MAGI EXPLORE' : 'MAGI MARKET'}
+						</span>
 					</div>
-					<p className="magi-market-subtitle">Buy, sell &amp; auction NFTs on Magi</p>
+					<p className="magi-market-subtitle">
+						{section === 'explore'
+							? 'Every NFT on Magi and who holds it'
+							: 'Buy, sell & auction NFTs on Magi'}
+					</p>
 				</div>
 			)}
 
-			<div className="magi-market-tabs">
-				{TABS.map((t) => (
+			{/* Top-level section switch, one level ABOVE the market tabs and at
+			    the same level as the header — Explore isn't an order-book view,
+			    so it doesn't belong among Listings/Auctions/…. */}
+			<div className="magi-market-sections" role="tablist" aria-label="Panel section">
+				{([
+					{ id: 'market' as Section, label: 'Market' },
+					{ id: 'explore' as Section, label: 'Explore' }
+				]).map((s) => (
 					<button
-						key={t.id}
+						key={s.id}
 						type="button"
-						className={`magi-market-tab ${tab === t.id ? 'active' : ''}`}
-						onClick={() => setTab(t.id)}
+						role="tab"
+						aria-selected={section === s.id}
+						className={`magi-market-section${section === s.id ? ' active' : ''}`}
+						onClick={() => setSection(s.id)}
 					>
-						{t.label}
+						{s.label}
 					</button>
 				))}
 			</div>
 
+			{section === 'market' && (
+				<div className="magi-market-tabs" ref={tabsRef} role="tablist" aria-label="Market views">
+					{TABS.map((t) => (
+						<button
+							key={t.id}
+							type="button"
+							role="tab"
+							aria-selected={tab === t.id}
+							className={`magi-market-tab ${tab === t.id ? 'active' : ''}`}
+							onClick={() => setTab(t.id)}
+						>
+							{t.label}
+						</button>
+					))}
+				</div>
+			)}
+
+			{section === 'explore' && (
+				<div className="magi-market-search">
+					<svg className="magi-market-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+						<circle cx="11" cy="11" r="8" />
+						<line x1="21" y1="21" x2="16.65" y2="16.65" />
+					</svg>
+					<input
+						value={exploreQuery}
+						onChange={(e) => setExploreQuery((e.target as HTMLInputElement).value)}
+						placeholder="Search NFTs by id, holder, collection or template…"
+						aria-label="Search NFTs"
+						autoComplete="off"
+						spellCheck={false}
+					/>
+					{exploreQuery && (
+						<button type="button" onClick={() => setExploreQuery('')}>Clear</button>
+					)}
+				</div>
+			)}
+
 			<div className="magi-market-subtabs-row">
 				<div className="magi-market-subtabs-action magi-market-subtabs-action--left">
-					{username && tab === 'listings' && (
+					{section === 'market' && username && tab === 'listings' && (
 						<>
 							<ToolbarAction label="Sell an NFT" onClick={() => setSheet({ kind: 'sell' })} />
 							<ToolbarAction label="Sweep" onClick={() => setSheet({ kind: 'sweep' })} style={{ marginLeft: '0.5rem' }} />
 						</>
 					)}
-					{username && tab === 'offers' && (
+					{section === 'market' && username && tab === 'offers' && (
 						<ToolbarAction label="Make an offer" onClick={() => setSheet({ kind: 'offer' })} />
 					)}
-					{username && tab === 'auctions' && (
+					{section === 'market' && username && tab === 'auctions' && (
 						<ToolbarAction label="New auction" onClick={() => setSheet({ kind: 'auction' })} />
 					)}
-					{username && tab === 'mintspots' && (
+					{section === 'market' && username && tab === 'mintspots' && (
 						<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} />
 					)}
-					{username && tab === 'bundles' && (
+					{section === 'market' && username && tab === 'bundles' && (
 						<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} />
 					)}
-					{username && tab === 'swaps' && (
+					{section === 'market' && username && tab === 'swaps' && (
 						<ToolbarAction label="Propose swap" onClick={() => setSheet({ kind: 'proposeSwap' })} />
 					)}
-					{username && tab === 'rentals' && (
+					{section === 'market' && username && tab === 'rentals' && (
 						<ToolbarAction label="List for rental" onClick={() => setSheet({ kind: 'listRental' })} />
 					)}
-					{username && tab === 'tokens' && (
+					{section === 'market' && username && tab === 'tokens' && (
 						<ToolbarAction label="Sell a token" onClick={() => setSheet({ kind: 'sellToken' })} />
 					)}
 				</div>
@@ -610,6 +1101,10 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					))}
 				</div>
 				<div className="magi-market-subtabs-action magi-market-subtabs-action--right">
+					{/* Explore has no price / payment-token / date field to filter
+					    on, so opening the bar there would change nothing — worse
+					    than having no toggle at all. */}
+					{section !== 'explore' && (
 					<button
 						type="button"
 						className={`magi-market-filter-toggle-btn${filtersOpen ? ' active' : ''}`}
@@ -622,6 +1117,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
 						</svg>
 					</button>
+					)}
 					<div className="magi-market-help-wrap" ref={helpRef}>
 						<button
 							type="button"
@@ -639,14 +1135,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						</button>
 						{helpOpen && (
 							<div className="magi-market-help-popover" role="dialog" aria-label="Tab help">
-								{TAB_HELP[tab]}
+								{section === 'explore' ? EXPLORE_HELP : TAB_HELP[tab]}
 							</div>
 						)}
 					</div>
 				</div>
 			</div>
 
-			{filtersOpen && (
+			{section === 'market' && filtersOpen && (
 				<FilterBar
 					value={filters}
 					onChange={setFilters}
@@ -655,20 +1151,21 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				/>
 			)}
 
-			{err && <div className="magi-market-state">{err}</div>}
+			{section === 'market' && err && <div className="magi-market-state">{err}</div>}
 
-			{!err && loading && <Spinner label="Loading…" />}
+			{section === 'market' && !err && loading && <Spinner label="Loading…" />}
 
-			{!err && !loading && tab === 'listings' && (
+			{section === 'market' && !err && !loading && tab === 'listings' && (
 				filteredListings.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You haven't listed anything." : 'No active listings from others.'}
 					</div>
 				) : (
-					groupByContract(filteredListings).map((g) => (
+					groupByContract(filteredListings, collMeta.name).map((g) => (
 						<CollectionGroup
 							key={g.contractId}
 							collectionName={collMeta.name(g.contractId)}
+							owner={collMeta.owner(g.contractId)}
 							count={g.items.length}
 							action={ownerGear(g.contractId)}
 						>
@@ -734,7 +1231,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'offers' && (
+			{section === 'market' && !err && !loading && tab === 'offers' && (
 				filteredOffers.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You haven't made any offers yet." : 'No open offers from others.'}
@@ -746,16 +1243,34 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							// Treat collection offers as having a synthetic tokenId so the
 							// per-collection grouper still partitions them sensibly.
 							tokenId: o.tokenId || '(collection)'
-						}))
+						})),
+						collMeta.name
 					).map((g) => (
 						<CollectionGroup
 							key={g.contractId}
 							collectionName={collMeta.name(g.contractId)}
+							owner={collMeta.owner(g.contractId)}
 							count={g.items.length}
 							action={ownerGear(g.contractId)}
 						>
 							{g.items.map((o) => {
 								const isCol = o.tokenId === '(collection)';
+								// Only a holder can fulfil an offer — the contract pulls the
+								// NFT from the accepter's wallet, so a non-holder's accept
+								// aborts ("Insufficient NFT balance to fulfill offer") after
+								// burning RC. A collection offer can be met with any token
+								// of the collection; a token-specific one needs that id.
+								// `null` = not yet known (still loading, or nobody
+								// connected), so the button stays visible but disabled
+								// rather than flickering in and out.
+								const canAccept: boolean | null = !username
+									? null
+									: isCol
+										? nftHoldings.holdsAnyIn(o.nftContract)
+										: (() => {
+											const b = nftHoldings.balanceOf(o.nftContract, o.tokenId);
+											return b === null ? null : b > 0n;
+										})();
 								return (
 									<MarketTile
 										key={o.offerId}
@@ -779,11 +1294,24 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 														tabIndex={0}>
 														From: {o.buyer}
 													</span>
-													<button type="button" className="magi-market-submit"
-														disabled={!username}
-														onClick={() => setSheet({ kind: 'acceptOffer', offer: { ...o, tokenId: isCol ? '' : o.tokenId } })}>
-														Accept
-													</button>
+													{canAccept !== false ? (
+														<button type="button" className="magi-market-submit"
+															disabled={!username || canAccept === null}
+															title={
+																!username
+																	? 'Connect a wallet to accept offers'
+																	: canAccept === null
+																		? 'Checking your holdings…'
+																		: undefined
+															}
+															onClick={() => setSheet({ kind: 'acceptOffer', offer: { ...o, tokenId: isCol ? '' : o.tokenId } })}>
+															Accept
+														</button>
+													) : (
+														<span className="magi-market-field-hint">
+															{isCol ? 'You hold nothing from this collection' : "You don't hold this NFT"}
+														</span>
+													)}
 												</>
 											)
 										}
@@ -795,16 +1323,17 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'auctions' && (
+			{section === 'market' && !err && !loading && tab === 'auctions' && (
 				filteredAuctions.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You don't have active auctions." : 'No active auctions from others.'}
 					</div>
 				) : (
-					groupByContract(filteredAuctions).map((g) => (
+					groupByContract(filteredAuctions, collMeta.name).map((g) => (
 						<CollectionGroup
 							key={g.contractId}
 							collectionName={collMeta.name(g.contractId)}
+							owner={collMeta.owner(g.contractId)}
 							count={g.items.length}
 							action={ownerGear(g.contractId)}
 						>
@@ -898,16 +1427,17 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'mintspots' && (
+			{section === 'market' && !err && !loading && tab === 'mintspots' && (
 				filteredMintSpots.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You don't have active mint-spot listings." : 'No active mint-spot listings from others.'}
 					</div>
 				) : (
-					groupByContract(filteredMintSpots).map((g) => (
+					groupByContract(filteredMintSpots, collMeta.name).map((g) => (
 						<CollectionGroup
 							key={g.contractId}
 							collectionName={collMeta.name(g.contractId)}
+							owner={collMeta.owner(g.contractId)}
 							count={g.items.length}
 							action={ownerGear(g.contractId)}
 						>
@@ -943,7 +1473,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'tokens' && (
+			{section === 'market' && !err && !loading && tab === 'tokens' && (
 				filteredTokenListings.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You don't have active token sales." : 'No active token sales from others.'}
@@ -990,7 +1520,117 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'bundles' && (
+			{/* Explore — every NFT on the network and who holds it, grouped by
+			    collection and then by mint template. Not a market view: these
+			    tokens need not be listed, so the action is "ask the holder to
+			    sell" (an offer), or for your own inventory, "list it". Its
+			    loading/error state is its own (`allNfts`), not the market-view
+			    `loading`/`err`. Paged, never capped — every match is reachable. */}
+			{section === 'explore' && (
+				allNfts.error ? (
+					<div className="magi-market-state">{allNfts.error}</div>
+				) : allNfts.loading && exploreShown.length === 0 ? (
+					<Spinner label="Loading every NFT…" />
+				) : exploreFiltered.length === 0 ? (
+					<div className="magi-market-state">
+						{exploreQuery.trim()
+							? `Nothing matches “${exploreQuery.trim()}”.`
+							: scope === 'yours'
+								? "You don't hold any NFTs yet."
+								: 'No NFTs found on this network.'}
+					</div>
+				) : (
+					<>
+						{allNfts.truncated && (
+							<div className="magi-market-state">
+								Showing a partial set — there are more NFTs than this view enumerates.
+							</div>
+						)}
+
+						{/* Wide panel: collections down the left, the open one's
+						    contents on the right. Narrow (or embedded in a narrow
+						    column): the stacked accordion, which works at any width.
+						    Driven by the PANEL's measured width, not the viewport. */}
+						{exploreSplit ? (
+							<div className="magi-market-explore-split">
+								<nav className="magi-market-explore-list" aria-label="Collections">
+									{exploreGroups.map((g) => {
+										const active = g.contractId === exploreActiveGroup?.contractId;
+										return (
+											<button
+												key={g.contractId}
+												type="button"
+												className={`magi-market-explore-collbtn${active ? ' active' : ''}`}
+												aria-current={active}
+												onClick={() => setExploreColl(g.contractId)}
+											>
+												<span className="magi-market-explore-collname">
+													{collMeta.name(g.contractId)}
+													{bareAccount(collMeta.owner(g.contractId)) && (
+														<span className="magi-market-coll-owner">
+															{' '}({bareAccount(collMeta.owner(g.contractId))})
+														</span>
+													)}
+												</span>
+												<span className="magi-market-coll-count">{g.total}</span>
+											</button>
+										);
+									})}
+								</nav>
+								<div className="magi-market-explore-detail">
+									{exploreActiveGroup && (
+										<>
+											<div className="magi-market-explore-detail-head">
+												<span className="magi-market-coll-name">
+													{collMeta.name(exploreActiveGroup.contractId)}
+													{bareAccount(collMeta.owner(exploreActiveGroup.contractId)) && (
+														<span className="magi-market-coll-owner">
+															{' '}({bareAccount(collMeta.owner(exploreActiveGroup.contractId))})
+														</span>
+													)}
+												</span>
+												<span className="magi-market-coll-count">{exploreActiveGroup.total}</span>
+												{ownerGear(exploreActiveGroup.contractId)}
+											</div>
+											<div className="magi-market-coll-stack">
+												{renderExploreGroupBody(exploreActiveGroup)}
+											</div>
+										</>
+									)}
+								</div>
+							</div>
+						) : (
+							exploreGroups.map((g) => (
+								<CollectionGroup
+									key={g.contractId}
+									collectionName={collMeta.name(g.contractId)}
+									owner={collMeta.owner(g.contractId)}
+									count={g.total}
+									action={ownerGear(g.contractId)}
+									layout="stack"
+								>
+									{renderExploreGroupBody(g)}
+								</CollectionGroup>
+							))
+						)}
+
+						<div className="magi-market-loadmore">
+							<span className="magi-market-row-sub">
+								{exploreShown.length} of{' '}
+								{exploreSplit
+									? (exploreActiveGroup?.total ?? 0)
+									: exploreFiltered.length}{' '}
+								NFTs shown
+								{!exploreSplit && exploreGroups.length > 1
+									? ` across ${exploreGroups.length} collections`
+									: ''}
+							</span>
+						</div>
+					</>
+				)
+			)}
+
+			{section === 'market' && !err && !loading && tab === 'bundles' && (
 				scopedBundles.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You don't have active bundles." : 'No active bundles from others.'}
@@ -1012,7 +1652,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'swaps' && (
+			{section === 'market' && !err && !loading && tab === 'swaps' && (
 				scopedSwaps.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You haven't proposed any swaps." : 'No open swap proposals from others.'}
@@ -1053,16 +1693,17 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				)
 			)}
 
-			{!err && !loading && tab === 'rentals' && (
+			{section === 'market' && !err && !loading && tab === 'rentals' && (
 				scopedRentals.length === 0 ? (
 					<div className="magi-market-state">
 						{scope === 'yours' ? "You don't have active rental listings." : 'No rental listings from others.'}
 					</div>
 				) : (
-					groupByContract(scopedRentals).map((g) => (
+					groupByContract(scopedRentals, collMeta.name).map((g) => (
 						<CollectionGroup
 							key={g.contractId}
 							collectionName={collMeta.name(g.contractId)}
+							owner={collMeta.owner(g.contractId)}
 							count={g.items.length}
 							action={ownerGear(g.contractId)}
 						>
@@ -1123,7 +1764,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			)}
 
 			{sheet?.kind === 'sell' && username && (
-				<ListForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+				<ListForm
+					client={client}
+					username={username}
+					defaultNftContract={sheet.nftContract}
+					defaultTokenId={sheet.tokenId}
+					onSuccess={success}
+					onClose={() => setSheet(null)}
+				/>
 			)}
 			{sheet?.kind === 'auction' && username && (
 				<CreateAuctionForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
@@ -1180,8 +1828,8 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				<MakeOfferForm
 					client={client}
 					username={username}
-					defaultNftContract={sheet.listing?.nftContract}
-					defaultTokenId={sheet.listing?.tokenId}
+					defaultNftContract={sheet.listing?.nftContract ?? sheet.nftContract}
+					defaultTokenId={sheet.listing?.tokenId ?? sheet.tokenId}
 					onSuccess={success}
 					onClose={() => setSheet(null)}
 				/>

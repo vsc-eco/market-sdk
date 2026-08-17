@@ -77,6 +77,29 @@
 				.layout { grid-template-columns: 1fr; gap: 0; }
 				.toc { display: none; }
 			}
+			/* Phones. The wallet bar is a single row of icon + copy + a
+			 * ~470px action cluster (network select, account input, connect
+			 * button), which is `flex-shrink: 0` — so below ~600px it pushed
+			 * the whole document wider than the viewport and the page scrolled
+			 * sideways. Stack it and let the cluster shrink. */
+			@media (max-width: 600px) {
+				.wallet-bar {
+					flex-wrap: wrap;
+					gap: 10px;
+					padding: 14px;
+				}
+				.wallet-bar-body { flex: 1 1 calc(100% - 54px); }
+				.wallet-bar-actions {
+					flex: 1 1 100%;
+					flex-shrink: 1;
+					min-width: 0;
+				}
+				.wallet-bar-actions input,
+				.wallet-bar-actions select {
+					flex: 1 1 140px;
+					min-width: 0;
+				}
+			}
 			h1 {
 				font-size: 30px;
 				margin: 0 0 8px;

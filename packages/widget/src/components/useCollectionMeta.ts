@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-	gqlFetchFailover,
-	resolveIndexerUrls,
-	type MagiConfig
-} from '@vsc.eco/market-sdk';
+import { resolveIndexerUrls, type MagiConfig } from '@vsc.eco/market-sdk';
+import { gqlFetchAllPages } from './gqlPaged.js';
 
 interface OverviewRow {
 	contract_id: string;
@@ -47,16 +44,26 @@ export function useCollectionMeta(config: MagiConfig): CollectionMeta {
 	useEffect(() => {
 		let cancelled = false;
 		setReady(false);
-		gqlFetchFailover<{ magi_nft_overview: OverviewRow[] }>(
+		// Paged: the indexer caps every response at 100 rows. Under ~100
+		// collections this changes nothing, but past that an un-paged read
+		// would silently drop the tail — and a collection with no name here
+		// degrades to a shortened contract id, which also sorts wrong in the
+		// name-ordered group lists.
+		gqlFetchAllPages<OverviewRow>(
 			urls,
-			'{ magi_nft_overview { contract_id name owner } }'
+			`query CM($limit:Int!,$offset:Int!){
+				magi_nft_overview(order_by:{contract_id:asc}, limit:$limit, offset:$offset){
+					contract_id name owner
+				}
+			}`,
+			(d) => (d as { magi_nft_overview?: OverviewRow[] }).magi_nft_overview
 		)
-			.then((d) => {
+			.then(({ rows: overview }) => {
 				if (cancelled) return;
 				const m = new Map<string, string>();
 				const o = new Map<string, string>();
 				const list: CollectionRow[] = [];
-				for (const r of d.magi_nft_overview ?? []) {
+				for (const r of overview) {
 					if (r.name) m.set(r.contract_id, r.name);
 					if (r.owner) o.set(r.contract_id, r.owner);
 					list.push({ contractId: r.contract_id, name: r.name ?? short(r.contract_id), owner: r.owner ?? '' });

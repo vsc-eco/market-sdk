@@ -14,10 +14,15 @@ import {
  * `${contractId}:${tokenId}` so re-renders don't re-fetch resolved items,
  * and an early-bailout skips items already in the map.
  *
- * `resolveNftImages` itself batches per contract and chunks the
- * `getStateByKeys` keys inside `getTokenProperties`, so a 1000-token
- * collection won't blow the node's request size.
+ * Requests are chunked HERE, not by the provider: token-sdk's
+ * `getTokenProperties` puts every key into a single `getStateByKeys` and
+ * swallows the failure, so one call covering more than the node's ~100-key
+ * limit resolves nothing and every tile silently falls back to the Magi
+ * logo. Chunking at this layer keeps each call well inside the limit (the
+ * market provider uses the same 80-key bound for its own state reads), and
+ * a partial failure then costs one chunk instead of the whole view.
  */
+const CHUNK = 40;
 export interface NftImagesResult {
 	get: (nftContract: string, tokenId: string) => string | null | undefined;
 	ready: boolean;
@@ -70,28 +75,32 @@ export function useNftImages(
 					templateId: null
 				}) as unknown as NftItem
 		);
-		nft.nft.provider
-			.resolveNftImages(stubs)
-			.then((map) => {
+		// Resolve chunk by chunk, committing each as it lands so a long list
+		// fills in progressively instead of staying on the fallback logo until
+		// the last request returns. A chunk that throws marks only its own
+		// items resolved-as-null.
+		(async () => {
+			for (let i = 0; i < stubs.length && !cancelled; i += CHUNK) {
+				const slice = stubs.slice(i, i + CHUNK);
+				const refs = missing.slice(i, i + CHUNK);
+				let map = new Map<string, string | null>();
+				try {
+					map = await nft.nft.provider.resolveNftImages(slice);
+				} catch {
+					/* fall through — this chunk resolves to null */
+				}
 				if (cancelled) return;
 				setImages((prev) => {
 					const next = new Map(prev);
-					for (const m of missing) {
+					for (const m of refs) {
 						const k = `${m.nftContract}:${m.tokenId}`;
 						next.set(k, map.get(k) ?? null);
 					}
 					return next;
 				});
-			})
-			.catch(() => {
-				if (cancelled) return;
-				setImages((prev) => {
-					const next = new Map(prev);
-					for (const m of missing) next.set(`${m.nftContract}:${m.tokenId}`, null);
-					return next;
-				});
-			})
-			.finally(() => !cancelled && setReady(true));
+			}
+			if (!cancelled) setReady(true);
+		})();
 		return () => {
 			cancelled = true;
 		};

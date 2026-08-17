@@ -8,7 +8,16 @@ import {
 } from '@vsc.eco/token-sdk';
 import { Spinner } from './Spinner.js';
 import magiSvg from '../assets/magi.svg';
-import type { TransferableToken } from './useCollectionTokens.js';
+import type { CollectionToken } from './useCollectionTokens.js';
+
+/**
+ * Tiles rendered at once, and images resolved, per view. A collection can
+ * hold 1000+ tokens; `resolveNftImages` batches per-token props into one
+ * `getStateByKeys` per contract and the node rejects an oversized request,
+ * so resolving everything would make every tile fall back to the logo. The
+ * search box is the way past the cap.
+ */
+const RENDER_CAP = 60;
 
 /** Sentinel for the "any NFT in this collection" (collection-wide) choice. */
 export const ANY_TOKEN = '__any__';
@@ -17,8 +26,8 @@ export interface CollectionNftPickerProps {
 	config: MagiConfig;
 	/** The collection being browsed (NFTs aren't from the user's wallet). */
 	nftContract: string;
-	/** Transferable tokens to show (from `useCollectionTokens`). */
-	tokens: TransferableToken[];
+	/** Tokens to show (from `useCollectionTokens`), offerable ones first. */
+	tokens: CollectionToken[];
 	loading?: boolean;
 	/** '' = nothing picked; ANY_TOKEN = collection-wide; else a tokenId. */
 	value: string;
@@ -31,12 +40,18 @@ function Tile({
 	imageUrl,
 	tokenId,
 	tag,
+	sub,
+	disabled,
+	title,
 	selected,
 	onPick
 }: {
 	imageUrl: string | null;
 	tokenId: string;
 	tag?: string;
+	sub?: string;
+	disabled?: boolean;
+	title?: string;
 	selected: boolean;
 	onPick: () => void;
 }) {
@@ -44,11 +59,14 @@ function Tile({
 	const useFallback = !imageUrl || imgFailed;
 	return (
 		<div
-			className={`magi-market-tile${selected ? ' selected' : ''}`}
+			className={`magi-market-tile${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}`}
 			role="button"
-			tabIndex={0}
-			onClick={onPick}
+			aria-disabled={disabled}
+			title={title}
+			tabIndex={disabled ? -1 : 0}
+			onClick={disabled ? undefined : onPick}
 			onKeyDown={(e) => {
+				if (disabled) return;
 				if (e.key === 'Enter' || e.key === ' ') {
 					e.preventDefault();
 					onPick();
@@ -63,6 +81,7 @@ function Tile({
 				)}
 			</div>
 			<div className="magi-market-tile-id" title={tokenId}>#{tokenId}</div>
+			{sub && <div className="magi-market-tile-sub">{sub}</div>}
 			{tag && (
 				<div className="magi-market-tile-row">
 					<span className="magi-market-tile-tag">{tag}</span>
@@ -70,6 +89,17 @@ function Tile({
 			)}
 		</div>
 	);
+}
+
+/** "hive:alice" → "alice"; a `contract:vsc1…` holder stays recognisable. */
+const shortHolder = (a: string) =>
+	a.startsWith('contract:') ? 'marketplace escrow' : a.replace(/^hive:/, '');
+
+/** "held by alice", "held by alice +2" — the answer to "who has this one". */
+function holderLabel(holders: string[]): string | undefined {
+	if (holders.length === 0) return undefined;
+	const first = shortHolder(holders[0]);
+	return holders.length === 1 ? `held by ${first}` : `held by ${first} +${holders.length - 1}`;
 }
 
 /**
@@ -98,12 +128,23 @@ export function CollectionNftPicker({
 	const [images, setImages] = useState<Map<string, string | null>>(new Map());
 	const [query, setQuery] = useState('');
 
-	// Resolve images for the transferable token set (one getStateByKeys per
-	// contract under the hood).
+	const filtered = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return tokens;
+		return tokens.filter(
+			(t) =>
+				t.tokenId.toLowerCase().includes(q) ||
+				t.holders.some((h) => h.toLowerCase().includes(q))
+		);
+	}, [tokens, query]);
+
+	const shown = useMemo(() => filtered.slice(0, RENDER_CAP), [filtered]);
+
+	// Resolve images only for the tiles actually on screen — see RENDER_CAP.
 	useEffect(() => {
-		if (!nftContract || tokens.length === 0) return;
+		if (!nftContract || shown.length === 0) return;
 		let cancelled = false;
-		const items = tokens.map((t) => ({ contractId: nftContract, tokenId: t.tokenId } as NftItem));
+		const items = shown.map((t) => ({ contractId: nftContract, tokenId: t.tokenId } as NftItem));
 		nft.nft.provider.resolveNftImages(items).then((m) => {
 			if (cancelled) return;
 			setImages((prev) => {
@@ -113,15 +154,10 @@ export function CollectionNftPicker({
 			});
 		}).catch(() => {});
 		return () => { cancelled = true; };
-	}, [nft, nftContract, tokens]);
-
-	const filtered = useMemo(() => {
-		const q = query.trim().toLowerCase();
-		if (!q) return tokens;
-		return tokens.filter((t) => t.tokenId.toLowerCase().includes(q));
-	}, [tokens, query]);
+	}, [nft, nftContract, shown]);
 
 	const imgFor = (tokenId: string) => images.get(`${nftContract}:${tokenId}`) ?? null;
+	const offerableCount = useMemo(() => tokens.filter((t) => t.offerable).length, [tokens]);
 
 	return (
 		<div className="magi-market-field">
@@ -139,13 +175,13 @@ export function CollectionNftPicker({
 					<input
 						value={query}
 						onChange={(e) => setQuery((e.target as HTMLInputElement).value)}
-						placeholder="Search by token id…"
+						placeholder="Search by token id or holder…"
 						autoComplete="off"
 						spellCheck={false}
 						disabled={disabled}
 					/>
 				</div>
-				{loading && <Spinner label="Loading transferable NFTs…" />}
+				{loading && <Spinner label="Loading collection NFTs…" />}
 				{!loading && (
 					<div className="magi-market-grid">
 						{/* Collection-wide "any NFT" choice always first. */}
@@ -169,21 +205,40 @@ export function CollectionNftPicker({
 								<span className="magi-market-tile-tag">collection-wide</span>
 							</div>
 						</div>
-						{filtered.map((t) => (
+						{shown.map((t) => (
 							<Tile
 								key={t.tokenId}
 								imageUrl={imgFor(t.tokenId)}
 								tokenId={t.tokenId}
-								tag={t.soulbound ? 'SBT (owner)' : undefined}
+								sub={holderLabel(t.holders)}
+								tag={
+									!t.offerable
+										? t.holders.length === 0 ? 'unminted' : 'not transferable'
+										: t.soulbound ? 'SBT (owner)' : undefined
+								}
+								disabled={!t.offerable}
+								title={t.blockedReason}
 								selected={value === t.tokenId}
 								onPick={() => onChange(t.tokenId)}
 							/>
 						))}
 					</div>
 				)}
+				{!loading && filtered.length > shown.length && (
+					<p className="magi-market-field-hint">
+						Showing {shown.length} of {filtered.length} — search by token id or holder to narrow it down.
+					</p>
+				)}
+				{!loading && tokens.length > 0 && offerableCount === 0 && (
+					<p className="magi-market-field-hint">
+						Nothing in this collection can be delivered right now (unminted, or soulbound and
+						not held by the collection owner) — a collection-wide offer above still works if
+						that changes.
+					</p>
+				)}
 				{!loading && tokens.length === 0 && (
 					<div className="magi-market-state">
-						No transferable NFTs in this collection — you can still make a collection-wide offer above.
+						No NFTs found in this collection — you can still make a collection-wide offer above.
 					</div>
 				)}
 			</div>
