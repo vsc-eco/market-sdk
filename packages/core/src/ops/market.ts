@@ -844,6 +844,65 @@ export function buildMintSpotFlow(
 	return out;
 }
 
+export interface AcceptOfferFlowParams {
+	offerId: number;
+	amount: number;
+	/** The offer's NFT collection — the approval leg targets this contract. */
+	nftContract: string;
+	/**
+	 * The token being delivered. For a token-specific offer this is
+	 * `offer.tokenId`; for a collection offer it's the id the accepting
+	 * holder picked.
+	 */
+	tokenId: string;
+	skipApproval?: boolean;
+}
+
+/**
+ * Full "accept an offer" flow. Accepting is a *sale* — the contract pulls
+ * the NFT out of the accepter's wallet via magi_nft's `safeTransferFrom` —
+ * so `doAcceptOffer` preflights authorization exactly like `doList` does
+ * and aborts with "Marketplace not approved as operator or sufficient
+ * per-token allowance to fulfill offer" when neither is in place. Sellers
+ * who never listed this token have no such approval, so the accept leg
+ * alone fails.
+ *
+ * This emits the per-token ERC-6909 allowance
+ * (`approve(market, tokenId, amount)` — least-privilege, scoped to exactly
+ * the token and count being delivered rather than a blanket
+ * `setApprovalForAll` over the collection) followed by the accept leg, in
+ * broadcast order. `skipApproval` drops the approve leg when the market is
+ * already an operator on the collection (or already holds a sufficient
+ * allowance on this token).
+ */
+export function buildAcceptOfferFlow(
+	ctx: MarketOpContext,
+	p: AcceptOfferFlowParams
+): MarketOpBundle[] {
+	const out: MarketOpBundle[] = [];
+	if (!p.skipApproval) {
+		out.push(buildNftApprove(ctx, { nftContract: p.nftContract, tokenId: p.tokenId, amount: p.amount }));
+	}
+	out.push(buildAcceptOffer(ctx, { offerId: p.offerId, amount: p.amount }));
+	return out;
+}
+
+/** Same as `buildAcceptOfferFlow` but the second leg fulfils a
+ *  collection-wide offer with `tokenId`. */
+export function buildAcceptCollectionOfferFlow(
+	ctx: MarketOpContext,
+	p: AcceptOfferFlowParams
+): MarketOpBundle[] {
+	const out: MarketOpBundle[] = [];
+	if (!p.skipApproval) {
+		out.push(buildNftApprove(ctx, { nftContract: p.nftContract, tokenId: p.tokenId, amount: p.amount }));
+	}
+	out.push(
+		buildAcceptCollectionOffer(ctx, { offerId: p.offerId, tokenId: p.tokenId, amount: p.amount })
+	);
+	return out;
+}
+
 /**
  * Buy paid in a magi_token-style payment token: `approve(market, total)`
  * on the token contract, then `buy`. `total` is the smallest-unit decimal

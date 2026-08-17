@@ -2,7 +2,9 @@ import {
 	MAINNET_CONFIG,
 	TESTNET_CONFIG,
 	buildAcceptCollectionOffer,
+	buildAcceptCollectionOfferFlow,
 	buildAcceptOffer,
+	buildAcceptOfferFlow,
 	buildAcceptOwnership,
 	buildAcceptSwap,
 	buildAddPaymentToken,
@@ -69,6 +71,7 @@ import {
 	type ListRentalParams,
 	type ListTokenParams,
 	type BuyTokenParams,
+	type AcceptOfferFlowParams,
 	type MagiConfig,
 	type MakeOfferParams,
 	type MarketOpBundle,
@@ -109,7 +112,8 @@ export type {
 	RoyaltyInfo,
 	RoyaltySplit,
 	CustomJsonOp,
-	MarketOpBundle
+	MarketOpBundle,
+	AcceptOfferFlowParams
 } from '@vsc.eco/market-core';
 export {
 	createDeployerClient,
@@ -299,6 +303,22 @@ export interface MarketClient {
 	mintSpotListing(
 		username: string,
 		p: ListMintSpotsParams & { auth?: 'operator' | 'allowance'; skipApproval?: boolean }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/**
+	 * Cross-contract "accept a buy offer": NFT `approve(market,tokenId,amount)`
+	 * + `acceptOffer`. Accepting hands the NFT to the buyer, so the market
+	 * needs transfer authorization first — without it the accept leg aborts
+	 * with "Marketplace not approved as operator or sufficient per-token
+	 * allowance to fulfill offer".
+	 */
+	acceptOffer(
+		username: string,
+		p: AcceptOfferFlowParams
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract: NFT approve + `acceptCollectionOffer` (holder picks `tokenId`). */
+	acceptCollectionOffer(
+		username: string,
+		p: AcceptOfferFlowParams
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract: token `approve(market,total)` + `buy`. */
 	buyWithPayment(
@@ -494,6 +514,8 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 		auction: (u, p) => broadcastBatch(buildAuctionNftFlow(ctx(u), p)),
 		rental: (u, p) => broadcastBatch(buildRentalNftFlow(ctx(u), p)),
 		mintSpotListing: (u, p) => broadcastBatch(buildMintSpotFlow(ctx(u), p)),
+		acceptOffer: (u, p) => broadcastBatch(buildAcceptOfferFlow(ctx(u), p)),
+		acceptCollectionOffer: (u, p) => broadcastBatch(buildAcceptCollectionOfferFlow(ctx(u), p)),
 		buyWithPayment: (u, p) => broadcastBatch(buildBuyWithPayment(ctx(u), p)),
 		sellToken: (u, p) => broadcastBatch(buildSellTokenFlow(ctx(u), p)),
 		buyTokenWithPayment: (u, p) => broadcastBatch(buildBuyTokenWithPayment(ctx(u), p))

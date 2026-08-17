@@ -74,6 +74,8 @@ export {
 	buildAuctionNftFlow,
 	buildRentalNftFlow,
 	buildMintSpotFlow,
+	buildAcceptOfferFlow,
+	buildAcceptCollectionOfferFlow,
 	buildBuyWithPayment,
 	buildListToken,
 	buildDelistToken,
@@ -94,5 +96,6 @@ export type {
 	ListMintSpotsParams,
 	EmergencyWithdrawParams,
 	ListTokenParams,
-	BuyTokenParams
+	BuyTokenParams,
+	AcceptOfferFlowParams
 } from './ops/market.js';
