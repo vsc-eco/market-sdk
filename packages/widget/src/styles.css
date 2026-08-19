@@ -1873,6 +1873,14 @@
 
 /* ---- multi-stack bucket builder ---- */
 .magi-market-check {
+	/* width:100% is load-bearing and NOT redundant with the flex stretch you
+	   would expect to size this. Measured in a browser against Altera's real
+	   bundle: without it the label sizes to its own max-content (827px inside a
+	   343px column) and the prose runs off the card. `align-self: stretch` and
+	   `align-items: stretch` on the parent BOTH fail to fix it — a host page
+	   rule is stopping this label behaving as a stretchable flex item — so the
+	   width is stated outright rather than inferred. */
+	width: 100%;
 	display: flex;
 	gap: 0.55rem;
 	align-items: flex-start;
