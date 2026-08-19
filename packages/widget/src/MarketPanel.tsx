@@ -183,7 +183,7 @@ const EXPLORE_HELP =
 const TAB_HELP: Record<Tab, string> = {
 	listings: 'Fixed-price NFT sales — browse what others have listed and buy instantly. You can list your own NFTs for sale (and sweep several at once).',
 	bundles: 'Several NFTs sold together as one fixed-price lot. Buy a whole bundle in a single purchase, or create one from NFTs you own.',
-	buckets: 'Random-draw sales — packs, raffles and gacha. You pay a fixed price and the CONTRACT picks which NFT you get, so the pool and the odds are shown up front.',
+	buckets: 'Random-draw sales — packs, raffles and gacha. You pay a fixed price and the CONTRACT picks which NFT you get, so the stacks and the odds are shown up front.',
 	auctions: 'Timed NFT auctions — English (ascending bids) or Dutch (price declines until someone buys). Place bids on others’ auctions, or start your own.',
 	rentals: 'Rent an NFT for a chosen duration at a price per block; the NFT is escrowed until the rental ends. Rent one that’s offered, or list your own for rental.',
 	mintspots: 'Sell the right to mint new editions of a collection you own. Buyers pay to mint a fresh edition directly to themselves.',

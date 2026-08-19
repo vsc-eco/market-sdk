@@ -28,7 +28,7 @@ export interface BucketCardProps {
  * One entry, with what is still drawable and how likely it is.
  *
  * The odds are shown because they can be: the CONTRACT picks the unit, so
- * publishing the pool costs the seller nothing and is the only thing that makes
+ * publishing the stack costs the seller nothing and is the only thing that makes
  * a blind draw checkable. A bucket that hid its contents would be asking for
  * trust it has not earned.
  */
@@ -81,7 +81,7 @@ function EntryTile({
 					{gone ? 'gone' : `${entry.amountLeft} left`}
 				</span>
 				{chance !== null && !gone && (
-					<span className="magi-market-tile-tag" title="Chance per draw from this pool">
+					<span className="magi-market-tile-tag" title="Chance per draw from this stack">
 						{chance < 0.1 ? '<0.1' : chance.toFixed(1)}%
 					</span>
 				)}
@@ -92,10 +92,12 @@ function EntryTile({
 
 /**
  * A bucket rendered as a collapsible group: the header carries the price(s) and
- * the draw actions, the body shows what is still inside with per-pool odds.
+ * the draw actions, the body shows what is still inside with per-stack odds.
  *
- * Pools are surfaced explicitly rather than folded into one number because a
- * bucket with guaranteed slots drains UNEVENLY — the guaranteed pool empties
+ * Stacks are surfaced explicitly rather than folded into one number because a
+ * ("stack" is the user-facing name for what the contract's wire format calls a
+ * pool — `entries[].pool`, `packDraws[i]` — kept distinct from liquidity pools.)
+ * bucket with guaranteed slots drains UNEVENLY — the guaranteed stack empties
  * first and strands the rest — so "units left" alone can suggest a pack is
  * available when it cannot actually be filled.
  */
@@ -161,7 +163,7 @@ export function BucketCard({
 		return m;
 	}, [pools]);
 
-	/** Chance of drawing this entry, given a draw from its own pool. */
+	/** Chance of drawing this entry, given a draw from its own stack. */
 	const chanceOf = (e: BucketEntry): number | null => {
 		const total = poolUnits.get(e.pool);
 		if (!total) return null;
@@ -171,7 +173,7 @@ export function BucketCard({
 	const singlesOn = bucket.pricePerDraw !== '0' && bucket.pricePerDraw !== '';
 	const packsOn = bucket.pricePerPack !== '0' && bucket.pricePerPack !== '';
 
-	/** A pack needs every promised slot filled, so check pools not the total. */
+	/** A pack needs every promised slot filled, so check stacks not the total. */
 	const packFillable = useMemo(() => {
 		if (!packsOn || bucket.packDraws.length === 0) return false;
 		return bucket.packDraws.every((need: number, pool: number) => need === 0 || (poolUnits.get(pool) ?? 0) >= need);
@@ -219,7 +221,7 @@ export function BucketCard({
 							className="magi-market-submit"
 							style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
 							disabled={!username || busy || !packFillable}
-							title={packFillable ? undefined : 'A guaranteed slot has run out'}
+							title={packFillable ? undefined : 'A guaranteed stack has run out'}
 							onClick={onBuyPack}
 						>
 							Buy pack ({bucket.packSize})
@@ -239,7 +241,7 @@ export function BucketCard({
 			<div className="magi-market-row-sub" style={{ padding: '0 0.2rem 0.5rem' }}>
 				{bucket.unitsLeft} of {bucket.unitsStocked} left
 				{bucket.packDraws.length > 1 && (
-					<> · pack: {bucket.packDraws.map((n: number, i: number) => `${n} from pool ${i}`).join(' + ')}</>
+					<> · pack: {bucket.packDraws.map((n: number, i: number) => `${n} from stack ${i + 1}`).join(' + ')}</>
 				)}
 				{pools.length > 1 && (
 					<>
@@ -248,7 +250,7 @@ export function BucketCard({
 						{pools
 							.slice()
 							.sort((a, b) => a.pool - b.pool)
-							.map((p) => `pool ${p.pool}: ${p.unitsLeft}`)
+							.map((p) => `stack ${p.pool + 1}: ${p.unitsLeft}`)
 							.join(', ')}
 					</>
 				)}

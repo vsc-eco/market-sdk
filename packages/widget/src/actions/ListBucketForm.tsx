@@ -20,21 +20,29 @@ export interface ListBucketFormProps {
 
 /** The contract caps one call at 24 entries; more go in via addToBucket. */
 const MAX_ENTRIES = 24;
-/** The contract's pool ceiling. */
-const MAX_TIERS = 8;
+/** The contract's ceiling on stacks. */
+const MAX_STACKS = 8;
 
-interface Tier {
-	/** Display only — the contract identifies a tier by its index. */
+/**
+ * A stack of NFTs that a pack slot can draw from.
+ *
+ * On the wire the contract calls this a "pool" and identifies it by index —
+ * `entries[].pool`, `packDraws[i]`. "Stack" is the name everywhere a person can
+ * see, because "pool" reads as a liquidity pool in a product that also has
+ * those.
+ */
+interface Stack {
+	/** Display only — the contract identifies a stack by its index. */
 	name: string;
 	picks: NftMultiPick[];
-	/** Slots this tier fills in one pack. 0 = in the bucket, never guaranteed. */
+	/** Slots this stack fills in one pack. 0 = in the bucket, never guaranteed. */
 	perPack: string;
 }
 
-const DEFAULT_TIER_NAMES = ['Commons', 'Uncommons', 'Rares', 'Holos', 'Secrets', 'Tier 6', 'Tier 7', 'Tier 8'];
+const DEFAULT_STACK_NAMES = ['Commons', 'Uncommons', 'Rares', 'Holos', 'Secrets', 'Stack 6', 'Stack 7', 'Stack 8'];
 
-function newTier(index: number, perPack: string): Tier {
-	return { name: DEFAULT_TIER_NAMES[index] ?? `Tier ${index + 1}`, picks: [], perPack };
+function newStack(index: number, perPack: string): Stack {
+	return { name: DEFAULT_STACK_NAMES[index] ?? `Stack ${index + 1}`, picks: [], perPack };
 }
 
 /**
@@ -42,14 +50,17 @@ function newTier(index: number, perPack: string): Tier {
  * buyer receives.
  *
  * Exposes what the contract actually does, rather than a safe subset: up to
- * eight tiers, any number of guaranteed slots per tier, single draws and packs
- * priced independently (or both at once), and an optional expiry.
+ * eight stacks, any number of guaranteed slots per stack, single draws and
+ * packs priced independently (or both at once), and an optional expiry.
  *
  * The one thing the form insists on is coherence, because the contract does not
  * check it at listing time and the buyer is the one who pays for that: a pack
- * promising slots from a tier that cannot fill them lists perfectly happily and
+ * promising slots from a stack that cannot fill them lists perfectly happily and
  * then refuses every purchase. Every such mismatch is caught here with the
  * numbers spelled out.
+ *
+ * Naming: the contract's wire format says "pool"; everything a user reads says
+ * "stack".
  */
 export function ListBucketForm({
 	client,
@@ -63,7 +74,7 @@ export function ListBucketForm({
 	const [step, setStep] = useState(0);
 	const [sellSingles, setSellSingles] = useState(true);
 	const [sellPacks, setSellPacks] = useState(false);
-	const [tiers, setTiers] = useState<Tier[]>([newTier(0, '0')]);
+	const [stacks, setStacks] = useState<Stack[]>([newStack(0, '0')]);
 	const [paymentToken, setPaymentToken] = useState('');
 	const [pricePerDraw, setPricePerDraw] = useState('');
 	const [pricePerPack, setPricePerPack] = useState('');
@@ -72,12 +83,12 @@ export function ListBucketForm({
 	const [txId, setTxId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
-	const STEPS = ['Sale type', 'Tiers', 'Price', 'Review'];
+	const STEPS = ['Sale type', 'Stacks', 'Price', 'Review'];
 
 	// One collection per bucket — the contract stores a single nftContract, so
 	// the pickers all lock to whichever collection is picked first.
 	const lockCollection =
-		defaultNftContract ?? tiers.map((t) => t.picks[0]?.nftContract).find((c): c is string => !!c);
+		defaultNftContract ?? stacks.map((t) => t.picks[0]?.nftContract).find((c): c is string => !!c);
 
 	const microDraw =
 		paymentToken && pricePerDraw.trim() !== '' ? tokenMeta.toMicro(paymentToken, pricePerDraw.trim()) : '';
@@ -93,46 +104,46 @@ export function ListBucketForm({
 		}
 	};
 
-	const units = (t: Tier) => t.picks.reduce((a, p) => a + p.amount, 0);
-	const slots = (t: Tier) => {
+	const units = (t: Stack) => t.picks.reduce((a, p) => a + p.amount, 0);
+	const slots = (t: Stack) => {
 		const n = Number(t.perPack);
 		return Number.isInteger(n) && n > 0 ? n : 0;
 	};
-	const totalEntries = tiers.reduce((a, t) => a + t.picks.length, 0);
-	const totalUnits = tiers.reduce((a, t) => a + units(t), 0);
-	const packSize = tiers.reduce((a, t) => a + slots(t), 0);
+	const totalEntries = stacks.reduce((a, t) => a + t.picks.length, 0);
+	const totalUnits = stacks.reduce((a, t) => a + units(t), 0);
+	const packSize = stacks.reduce((a, t) => a + slots(t), 0);
 
-	/** How many packs the stock supports — the scarcest tier decides. */
+	/** How many packs the stock supports — the scarcest stack decides. */
 	const packsPossible = useMemo(() => {
 		if (!sellPacks || packSize === 0) return 0;
-		const limits = tiers.filter((t) => slots(t) > 0).map((t) => Math.floor(units(t) / slots(t)));
+		const limits = stacks.filter((t) => slots(t) > 0).map((t) => Math.floor(units(t) / slots(t)));
 		return limits.length ? Math.min(...limits) : 0;
-	}, [tiers, sellPacks, packSize]);
+	}, [stacks, sellPacks, packSize]);
 
-	const updateTier = (i: number, patch: Partial<Tier>) =>
-		setTiers((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+	const updateStack = (i: number, patch: Partial<Stack>) =>
+		setStacks((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)));
 
 	const stepProblem = useMemo<(string | null)[]>(() => {
 		const typeProblem = !sellSingles && !sellPacks ? 'Pick at least one way to sell.' : null;
 
-		const tierProblem = (() => {
+		const stackProblem = (() => {
 			if (totalEntries === 0) return 'Pick at least one NFT.';
 			if (totalEntries > MAX_ENTRIES)
 				return `${totalEntries} NFTs picked — up to ${MAX_ENTRIES} per bucket here; add the rest afterwards.`;
-			const empty = tiers.findIndex((t) => t.picks.length === 0);
-			if (empty !== -1) return `"${tiers[empty].name}" has no NFTs — fill it or remove the tier.`;
+			const empty = stacks.findIndex((t) => t.picks.length === 0);
+			if (empty !== -1) return `"${stacks[empty].name}" has no NFTs — fill it or remove the stack.`;
 			if (sellPacks) {
-				if (packSize === 0) return 'A pack needs at least one slot. Set how many cards come from a tier.';
+				if (packSize === 0) return 'A pack needs at least one slot. Set how many cards come from a stack.';
 				if (packSize > 24) return `A pack of ${packSize} exceeds the contract's 24-draw limit.`;
-				// Slots a tier cannot fill = a bucket that lists and then refuses
+				// Slots a stack cannot fill = a bucket that lists and then refuses
 				// every purchase, which the buyer discovers rather than the seller.
-				const short = tiers.find((t) => slots(t) > 0 && units(t) < slots(t));
+				const short = stacks.find((t) => slots(t) > 0 && units(t) < slots(t));
 				if (short)
 					return `"${short.name}" promises ${slots(short)} per pack but only has ${units(short)} unit${units(short) === 1 ? '' : 's'}.`;
 			}
-			// Single draws always come from the first tier, so it must have stock.
-			if (sellSingles && units(tiers[0]) === 0)
-				return `Single draws come from "${tiers[0].name}", which is empty.`;
+			// Single draws always come from the first stack, so it must have stock.
+			if (sellSingles && units(stacks[0]) === 0)
+				return `Single draws come from "${stacks[0].name}", which is empty.`;
 			return null;
 		})();
 
@@ -143,8 +154,8 @@ export function ListBucketForm({
 			return null;
 		})();
 
-		return [typeProblem, tierProblem, priceProblem, typeProblem ?? tierProblem ?? priceProblem];
-	}, [tiers, sellSingles, sellPacks, paymentToken, microDraw, microPack, totalEntries, packSize]);
+		return [typeProblem, stackProblem, priceProblem, typeProblem ?? stackProblem ?? priceProblem];
+	}, [stacks, sellSingles, sellPacks, paymentToken, microDraw, microPack, totalEntries, packSize]);
 
 	const problem = stepProblem[step];
 	const valid = stepProblem[STEPS.length - 1] === null;
@@ -154,13 +165,14 @@ export function ListBucketForm({
 		setSubmitting(true);
 		setError(null);
 		try {
-			const nftContract = tiers.flatMap((t) => t.picks)[0].nftContract;
-			const entries = tiers.flatMap((t, pool) =>
+			const nftContract = stacks.flatMap((t) => t.picks)[0].nftContract;
+			const entries = stacks.flatMap((t, pool) =>
 				t.picks.map((p) => ({ tokenId: p.tokenId, amount: p.amount, pool }))
 			);
-			// packDraws is positional: index = tier. A tier with no guaranteed
-			// slots still needs its 0 so later tiers keep their index.
-			const packDraws = sellPacks ? tiers.map((t) => slots(t)) : [];
+			// packDraws is positional: index = stack (the contract's "pool"). A
+			// stack with no guaranteed slots still needs its 0 so later stacks keep
+			// their index.
+			const packDraws = sellPacks ? stacks.map((t) => slots(t)) : [];
 			const { txIds } = await client.listBucket(username, {
 				nftContract,
 				entries,
@@ -188,7 +200,7 @@ export function ListBucketForm({
 					? undefined
 					: [
 							'A fixed-price sale where the contract picks which NFT the buyer gets.',
-							'Group your NFTs into tiers. Each pack slot draws from one tier — that is what makes a guarantee.',
+							'Group your NFTs into stacks. Each pack slot draws from one stack — that is what makes a guarantee.',
 							'What a draw costs, and how long it runs.',
 							'Check it over, then open.'
 						][step]
@@ -219,7 +231,7 @@ export function ListBucketForm({
 									onChange={(e) => setSellSingles(e.currentTarget.checked)}
 								/>
 								<span>
-									<strong>Single draws</strong> — one NFT at a time, drawn from the first tier.
+									<strong>Single draws</strong> — one NFT at a time, drawn from the first stack.
 									Weighted by units, so more copies of a card make it commoner.
 								</span>
 							</label>
@@ -232,7 +244,7 @@ export function ListBucketForm({
 								/>
 								<span>
 									<strong>Packs</strong> — several NFTs at once with a fixed shape. Each slot draws
-									from a chosen tier, which is how "every pack has a rare" becomes a promise rather
+									from a chosen stack, which is how "every pack has a rare" becomes a promise rather
 									than a hope.
 								</span>
 							</label>
@@ -241,34 +253,34 @@ export function ListBucketForm({
 
 					{step === 1 && (
 						<>
-							{tiers.map((tier, i) => (
-								<div key={i} className="magi-market-tier">
-									<div className="magi-market-tier-head">
+							{stacks.map((stack, i) => (
+								<div key={i} className="magi-market-stack">
+									<div className="magi-market-stack-head">
 										<TextInput
-											value={tier.name}
-											onChange={(v) => updateTier(i, { name: v })}
+											value={stack.name}
+											onChange={(v) => updateStack(i, { name: v })}
 											disabled={submitting}
 										/>
 										{sellPacks && (
-											<label className="magi-market-tier-slots">
+											<label className="magi-market-stack-slots">
 												<span>per pack</span>
 												<TextInput
 													type="number"
 													inputMode="numeric"
 													min={0}
-													value={tier.perPack}
-													onChange={(v) => updateTier(i, { perPack: v })}
+													value={stack.perPack}
+													onChange={(v) => updateStack(i, { perPack: v })}
 													disabled={submitting}
 												/>
 											</label>
 										)}
-										{tiers.length > 1 && (
+										{stacks.length > 1 && (
 											<button
 												type="button"
 												className="magi-market-submit ghost"
 												style={{ width: 'auto', padding: '0.25rem 0.6rem' }}
 												disabled={submitting}
-												onClick={() => setTiers((prev) => prev.filter((_, j) => j !== i))}
+												onClick={() => setStacks((prev) => prev.filter((_, j) => j !== i))}
 											>
 												Remove
 											</button>
@@ -277,9 +289,9 @@ export function ListBucketForm({
 									<NftMultiPicker
 										config={client.config}
 										username={username}
-										value={tier.picks}
-										onChange={(picks) => updateTier(i, { picks })}
-										label={`NFTs in "${tier.name}"`}
+										value={stack.picks}
+										onChange={(picks) => updateStack(i, { picks })}
+										label={`NFTs in "${stack.name}"`}
 										lockCollection={lockCollection}
 										filterItem={(it) => canTransferNft(it, username)}
 										max={MAX_ENTRIES}
@@ -287,20 +299,20 @@ export function ListBucketForm({
 									/>
 								</div>
 							))}
-							{tiers.length < MAX_TIERS && (
+							{stacks.length < MAX_STACKS && (
 								<button
 									type="button"
 									className="magi-market-submit ghost"
 									disabled={submitting}
-									onClick={() => setTiers((prev) => [...prev, newTier(prev.length, sellPacks ? '1' : '0')])}
+									onClick={() => setStacks((prev) => [...prev, newStack(prev.length, sellPacks ? '1' : '0')])}
 								>
-									Add a tier ({tiers.length}/{MAX_TIERS})
+									Add a stack ({stacks.length}/{MAX_STACKS})
 								</button>
 							)}
 							<p className="magi-market-field-hint">
 								{sellPacks
-									? 'A tier with 0 per pack is still in the bucket — it just is not guaranteed a slot.'
-									: 'Single draws come from the first tier. Add tiers if you also sell packs.'}
+									? 'A stack with 0 per pack is still in the bucket — it just is not guaranteed a slot.'
+									: 'Single draws come from the first stack. Add stacks if you also sell packs.'}
 							</p>
 						</>
 					)}
@@ -327,7 +339,7 @@ export function ListBucketForm({
 							{sellPacks && (
 								<Field
 									label="Price per pack"
-									hint={`Each pack: ${tiers
+									hint={`Each pack: ${stacks
 										.filter((t) => slots(t) > 0)
 										.map((t) => `${slots(t)} ${t.name.toLowerCase()}`)
 										.join(' + ')} (${packSize} card${packSize === 1 ? '' : 's'}).`}
@@ -364,7 +376,7 @@ export function ListBucketForm({
 											.join(' + ')}
 									</dd>
 								</div>
-								{tiers.map((t, i) => {
+								{stacks.map((t, i) => {
 									const u = units(t);
 									const rarest = t.picks.length
 										? t.picks.reduce((a, b) => (a.amount <= b.amount ? a : b))

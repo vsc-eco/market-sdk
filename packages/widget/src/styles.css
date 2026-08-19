@@ -1862,7 +1862,7 @@
 	color: var(--magi-text);
 }
 
-/* ---- multi-tier bucket builder ---- */
+/* ---- multi-stack bucket builder ---- */
 .magi-market-check {
 	display: flex;
 	gap: 0.55rem;
@@ -1881,26 +1881,26 @@
 .magi-market-check strong {
 	color: var(--magi-text);
 }
-.magi-market-tier {
+.magi-market-stack {
 	border: 1px solid var(--magi-card-border);
 	border-radius: 12px;
 	padding: 0.7rem;
 	margin-bottom: 0.7rem;
 }
-.magi-market-tier-head {
+.magi-market-stack-head {
 	display: flex;
 	gap: 0.5rem;
 	align-items: flex-end;
 	margin-bottom: 0.5rem;
 	flex-wrap: wrap;
 }
-/* The tier name grows; the slot count stays small — it is a 1-2 digit field and
+/* The stack name grows; the slot count stays small — it is a 1-2 digit field and
    a full-width input would imply otherwise. */
-.magi-market-tier-head > :first-child {
+.magi-market-stack-head > :first-child {
 	flex: 1 1 8rem;
 	min-width: 0;
 }
-.magi-market-tier-slots {
+.magi-market-stack-slots {
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
@@ -1908,6 +1908,6 @@
 	color: var(--magi-text-secondary);
 	white-space: nowrap;
 }
-.magi-market-tier-slots input {
+.magi-market-stack-slots input {
 	width: 4.5rem;
 }
