@@ -215,6 +215,70 @@ export interface Auction extends Indexed {
 }
 
 /** A single-collection atomic bundle listing. */
+/**
+ * A bucket as the indexer sees it: a fixed-price sale where the CONTRACT picks
+ * which unit the buyer gets.
+ *
+ * `unitsLeft` is derived from the event log (stocked − drawn − dropped) so it
+ * accounts for restocks and for stock that went stale. `unitsLeftReported` is
+ * the contract's own figure at the most recent purchase — a checkpoint, not a
+ * live value; the two diverge legitimately after a restock.
+ */
+export interface BucketListing {
+	bucketId: number;
+	seller: string;
+	nftContract: string;
+	paymentToken: string;
+	/** "0" when single draws are disabled. */
+	pricePerDraw: string;
+	/** "0" when pack sales are disabled. */
+	pricePerPack: string;
+	/** Draws per pool, e.g. [4,1] = 4 commons + 1 guaranteed rare. */
+	packDraws: number[];
+	/** Cards in one pack — the sum of packDraws. 0 when packs are off. */
+	packSize: number;
+	expirationBlock: number;
+	feeBps: number;
+	royaltyBps: number;
+	royaltyRecipient: string;
+	entryCount: number;
+	unitsStocked: number;
+	unitsLeft: number;
+	unitsLeftReported: number | null;
+	unitsDrawn: number;
+	unitsDropped: number;
+	purchases: number;
+	soldOut: boolean;
+	delisted: boolean;
+	active: boolean;
+}
+
+/** One token in a bucket, with what is still drawable. */
+export interface BucketEntry {
+	bucketId: number;
+	tokenId: string;
+	pool: number;
+	amountStocked: number;
+	amountDrawn: number;
+	amountDropped: number;
+	amountLeft: number;
+}
+
+/**
+ * Units remaining in one pool.
+ *
+ * Worth reading before offering a pack: a bucket with guaranteed slots drains
+ * UNEVENLY — the guaranteed pool empties first and strands the rest — so the
+ * grand total can look healthy while the next pack cannot actually be filled.
+ */
+export interface BucketPool {
+	bucketId: number;
+	pool: number;
+	unitsStocked: number;
+	unitsLeft: number;
+	distinctTokens: number;
+}
+
 export interface BundleListing {
 	bundleId: number;
 	seller: string;

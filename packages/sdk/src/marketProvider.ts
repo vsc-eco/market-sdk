@@ -4,6 +4,9 @@ import {
 	resolveMarketContractId,
 	type Auction,
 	type BundleListing,
+	type BucketListing,
+	type BucketEntry,
+	type BucketPool,
 	type Listing,
 	type MagiConfig,
 	type MarketInfo,
@@ -59,6 +62,24 @@ export interface MarketProvider {
 	 * actual token ids (e.g. to render the bundle's contents).
 	 */
 	getBundleItems(bundleId: number): Promise<{ nftContract: string; items: Array<{ tokenId: string; amount: number }> }>;
+	/**
+	 * Buckets — fixed-price sales where the CONTRACT picks the unit. Reads the
+	 * `magi_market_buckets` fold view.
+	 */
+	getBuckets(filter?: { seller?: string; nftContract?: string; activeOnly?: boolean }): Promise<BucketListing[]>;
+	/**
+	 * What is actually still inside a bucket, per token. Unlike bundles this
+	 * does NOT need a node state read — the contract emits its entries, so the
+	 * indexer can expand them. That is deliberate: a contract-picked draw is
+	 * only fair if the pool is public, so buyers can compute their own odds.
+	 */
+	getBucketEntries(bucketId: number): Promise<BucketEntry[]>;
+	/**
+	 * Units left per pool. Check this before offering a pack: a bucket with
+	 * guaranteed slots drains unevenly, so the grand total can look healthy
+	 * while the guaranteed pool is empty and no pack can be filled.
+	 */
+	getBucketPools(bucketId: number): Promise<BucketPool[]>;
 	getSwaps(filter?: { proposer?: string; activeOnly?: boolean }): Promise<SwapProposal[]>;
 	getRentals(filter?: { owner?: string; renter?: string; activeOnly?: boolean }): Promise<RentalListing[]>;
 	getMintSpotListings(filter?: { lister?: string; nftContract?: string; activeOnly?: boolean }): Promise<MintSpotListing[]>;
@@ -155,6 +176,48 @@ interface BundleRow {
 	active: boolean;
 }
 
+interface BucketRow {
+	bucket_id: unknown;
+	seller: string;
+	nft_contract: string;
+	payment_token: string;
+	price_per_draw: string;
+	price_per_pack: string;
+	pack_draws: string;
+	expiration_block: unknown;
+	fee_bps: unknown;
+	royalty_bps: unknown;
+	royalty_recipient: string;
+	entry_count: unknown;
+	units_stocked: unknown;
+	units_left: unknown;
+	units_left_reported: unknown;
+	units_drawn: unknown;
+	units_dropped: unknown;
+	purchases: unknown;
+	sold_out: boolean;
+	delisted: boolean;
+	active: boolean;
+}
+
+interface BucketEntryRow {
+	bucket_id: unknown;
+	token_id: string;
+	pool: unknown;
+	amount_stocked: unknown;
+	amount_drawn: unknown;
+	amount_dropped: unknown;
+	amount_left: unknown;
+}
+
+interface BucketPoolRow {
+	bucket_id: unknown;
+	pool: unknown;
+	units_stocked: unknown;
+	units_left: unknown;
+	distinct_tokens: unknown;
+}
+
 interface SwapRow {
 	swap_id: unknown;
 	proposer: string;
@@ -214,6 +277,20 @@ const OFFER_COLS =
 const AUCTION_COLS =
 	'auction_id seller nft_contract token_id amount auction_type start_price end_price start_block end_block high_bidder high_bid settled active indexer_block_height indexer_ts';
 const BUNDLE_COLS = 'bundle_id seller nft_contract count price active';
+const BUCKET_COLS =
+	'bucket_id seller nft_contract payment_token price_per_draw price_per_pack pack_draws ' +
+	'expiration_block fee_bps royalty_bps royalty_recipient entry_count units_stocked units_left ' +
+	'units_left_reported units_drawn units_dropped purchases sold_out delisted active ' +
+	'indexer_block_height indexer_ts';
+const BUCKET_ENTRY_COLS = 'bucket_id token_id pool amount_stocked amount_drawn amount_dropped amount_left';
+const BUCKET_POOL_COLS = 'bucket_id pool units_stocked units_left distinct_tokens';
+/**
+ * A bucket may hold up to 512 entries, but the indexer's Hasura role caps EVERY
+ * response at 100 rows and silently ignores a larger `limit`. Asking for 100 is
+ * therefore the honest maximum; a fuller bucket needs paging, which the widget
+ * does not need yet since it renders odds from what it can see.
+ */
+const MAX_BUCKET_ENTRY_ROWS = 100;
 const SWAP_COLS = 'swap_id proposer offered_nft wanted_nft active';
 const RENTAL_COLS = 'rental_id owner nft_contract token_id renter end_block active';
 const MINT_SPOT_COLS = 'listing_id lister nft_contract token_id max_spots sold active indexer_block_height indexer_ts';
@@ -275,6 +352,68 @@ function mapAuction(r: AuctionRow): Auction {
 		active: !!r.active,
 		indexedAt: r.indexer_ts ?? undefined,
 		indexedAtBlock: optNum(r.indexer_block_height)
+	};
+}
+
+/** `pack_draws` arrives as the JSON text the contract emitted, e.g. "[4,1]". */
+function parsePackDraws(raw: unknown): number[] {
+	if (Array.isArray(raw)) return raw.map((n) => num(n));
+	if (typeof raw !== 'string' || raw.trim() === '') return [];
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.map((n) => num(n)) : [];
+	} catch {
+		return [];
+	}
+}
+
+function mapBucket(r: BucketRow): BucketListing {
+	const packDraws = parsePackDraws(r.pack_draws);
+	return {
+		bucketId: num(r.bucket_id),
+		seller: r.seller,
+		nftContract: r.nft_contract,
+		paymentToken: r.payment_token,
+		pricePerDraw: str(r.price_per_draw),
+		pricePerPack: str(r.price_per_pack),
+		packDraws,
+		packSize: packDraws.reduce((a, b) => a + b, 0),
+		expirationBlock: num(r.expiration_block),
+		feeBps: num(r.fee_bps),
+		royaltyBps: num(r.royalty_bps),
+		royaltyRecipient: r.royalty_recipient ?? '',
+		entryCount: num(r.entry_count),
+		unitsStocked: num(r.units_stocked),
+		unitsLeft: num(r.units_left),
+		unitsLeftReported: r.units_left_reported == null ? null : num(r.units_left_reported),
+		unitsDrawn: num(r.units_drawn),
+		unitsDropped: num(r.units_dropped),
+		purchases: num(r.purchases),
+		soldOut: !!r.sold_out,
+		delisted: !!r.delisted,
+		active: !!r.active
+	};
+}
+
+function mapBucketEntry(r: BucketEntryRow): BucketEntry {
+	return {
+		bucketId: num(r.bucket_id),
+		tokenId: r.token_id,
+		pool: num(r.pool),
+		amountStocked: num(r.amount_stocked),
+		amountDrawn: num(r.amount_drawn),
+		amountDropped: num(r.amount_dropped),
+		amountLeft: num(r.amount_left)
+	};
+}
+
+function mapBucketPool(r: BucketPoolRow): BucketPool {
+	return {
+		bucketId: num(r.bucket_id),
+		pool: num(r.pool),
+		unitsStocked: num(r.units_stocked),
+		unitsLeft: num(r.units_left),
+		distinctTokens: num(r.distinct_tokens)
 	};
 }
 
@@ -411,6 +550,29 @@ export function createMarketProvider(
 	 * GqlFetchOptions are honoured exactly like token-sdk. An absent view
 	 * yields `[]` rather than throwing, so writes/node-reads still work.
 	 */
+	/**
+	 * Like `indexerList` but without an `order_by`.
+	 *
+	 * The bucket entry/pool views are GROUPED aggregates spanning a listing and
+	 * every restock, so they carry no single indexer_block_height to sort on —
+	 * asking Hasura to order by it would just error.
+	 */
+	async function indexerListUnordered<TRow, TOut>(
+		view: string,
+		cols: string,
+		where: Record<string, unknown>,
+		limit: number,
+		map: (r: TRow) => TOut
+	): Promise<TOut[]> {
+		const q = `query L($w: ${view}_bool_exp, $l: Int){ rows: ${view}(where:$w, limit:$l){ ${cols} } }`;
+		try {
+			const d = await gqlFetchFailover<{ rows: TRow[] }>(indexerUrls(), q, { w: where, l: limit }, fo);
+			return (d.rows ?? []).map(map);
+		} catch {
+			return [];
+		}
+	}
+
 	async function indexerList<TRow, TOut>(
 		view: string,
 		cols: string,
@@ -544,6 +706,34 @@ export function createMarketProvider(
 				paymentToken: v.pt ?? it.paymentToken ?? ''
 			}));
 		},
+		getBuckets: (f = {}) =>
+			indexerList<BucketRow, BucketListing>(
+				'magi_market_buckets',
+				BUCKET_COLS,
+				{
+					...(f.seller ? { seller: { _eq: f.seller } } : {}),
+					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
+					...activeWhere(f.activeOnly)
+				},
+				100,
+				mapBucket
+			),
+		getBucketEntries: (bucketId: number) =>
+			indexerListUnordered<BucketEntryRow, BucketEntry>(
+				'magi_market_bucket_entries',
+				BUCKET_ENTRY_COLS,
+				{ bucket_id: { _eq: bucketId } },
+				MAX_BUCKET_ENTRY_ROWS,
+				mapBucketEntry
+			),
+		getBucketPools: (bucketId: number) =>
+			indexerListUnordered<BucketPoolRow, BucketPool>(
+				'magi_market_bucket_pools',
+				BUCKET_POOL_COLS,
+				{ bucket_id: { _eq: bucketId } },
+				16,
+				mapBucketPool
+			),
 		getBundles: (f = {}) =>
 			indexerList<BundleRow, BundleListing>(
 				'magi_market_bundles',

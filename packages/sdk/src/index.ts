@@ -25,6 +25,12 @@ import {
 	buildCreateAuction,
 	buildDelist,
 	buildDelistBundle,
+	buildListBucket,
+	buildListBucketFlow,
+	buildAddToBucket,
+	buildBuyFromBucket,
+	buildBuyFromBucketWithPayment,
+	buildDelistBucket,
 	buildDelistMintSpots,
 	buildDelistRental,
 	buildDenyCollection,
@@ -66,6 +72,9 @@ import {
 	type BuyParams,
 	type CreateAuctionParams,
 	type ListBundleParams,
+	type ListBucketParams,
+	type BuyFromBucketParams,
+	type BucketEntryParam,
 	type ListMintSpotsParams,
 	type ListParams,
 	type ListRentalParams,
@@ -104,6 +113,9 @@ export type {
 	Offer,
 	Auction,
 	BundleListing,
+	BucketListing,
+	BucketEntry,
+	BucketPool,
 	SwapProposal,
 	RentalListing,
 	MintSpotListing,
@@ -248,6 +260,15 @@ export interface MarketClient {
 		listBundleOp(username: string, p: ListBundleParams): MarketOpBundle;
 		buyBundleOp(username: string, p: { bundleId: number }, intents?: VscIntent[]): MarketOpBundle;
 		delistBundleOp(username: string, p: { bundleId: number }): MarketOpBundle;
+		/** Open a bucket (random-draw sale). See `listBucketFlow` for the approval leg. */
+		listBucketOp(username: string, p: ListBucketParams): MarketOpBundle;
+		/** Approve the market, then open the bucket — returns both ops in order. */
+		listBucketFlow(username: string, p: ListBucketParams & { skipApproval?: boolean }): MarketOpBundle[];
+		/** Add stock to an existing bucket. Append-only: new token ids only. */
+		addToBucketOp(username: string, p: { bucketId: number; entries: BucketEntryParam[] }): MarketOpBundle;
+		/** Draw from a bucket — one unit, or a whole pack. */
+		buyFromBucketOp(username: string, p: BuyFromBucketParams, intents?: VscIntent[]): MarketOpBundle;
+		delistBucketOp(username: string, p: { bucketId: number }): MarketOpBundle;
 		proposeSwapOp(username: string, p: ProposeSwapParams): MarketOpBundle;
 		acceptSwapOp(username: string, p: { swapId: number }, intents?: VscIntent[]): MarketOpBundle;
 		cancelSwapOp(username: string, p: { swapId: number }): MarketOpBundle;
@@ -324,6 +345,11 @@ export interface MarketClient {
 	buyWithPayment(
 		username: string,
 		p: BuyParams & { paymentToken: string; total: string }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract bucket draw: token `approve(market,total)` + `buyFromBucket`. */
+	buyFromBucketWithPayment(
+		username: string,
+		p: BuyFromBucketParams & { paymentToken: string; total: string }
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract "sell a token": asset-token `approve(market,amount)` + `listToken`. */
 	sellToken(
@@ -482,6 +508,11 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 			listBundleOp: (u, p) => buildListBundle(ctx(u), p),
 			buyBundleOp: (u, p, i) => buildBuyBundle(ctx(u), p, i),
 			delistBundleOp: (u, p) => buildDelistBundle(ctx(u), p),
+			listBucketOp: (u, p) => buildListBucket(ctx(u), p),
+			listBucketFlow: (u, p) => buildListBucketFlow(ctx(u), p),
+			addToBucketOp: (u, p) => buildAddToBucket(ctx(u), p),
+			buyFromBucketOp: (u, p, i) => buildBuyFromBucket(ctx(u), p, i),
+			delistBucketOp: (u, p) => buildDelistBucket(ctx(u), p),
 			proposeSwapOp: (u, p) => buildProposeSwap(ctx(u), p),
 			acceptSwapOp: (u, p, i) => buildAcceptSwap(ctx(u), p, i),
 			cancelSwapOp: (u, p) => buildCancelSwap(ctx(u), p),
@@ -517,6 +548,7 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 		acceptOffer: (u, p) => broadcastBatch(buildAcceptOfferFlow(ctx(u), p)),
 		acceptCollectionOffer: (u, p) => broadcastBatch(buildAcceptCollectionOfferFlow(ctx(u), p)),
 		buyWithPayment: (u, p) => broadcastBatch(buildBuyWithPayment(ctx(u), p)),
+		buyFromBucketWithPayment: (u, p) => broadcastBatch(buildBuyFromBucketWithPayment(ctx(u), p)),
 		sellToken: (u, p) => broadcastBatch(buildSellTokenFlow(ctx(u), p)),
 		buyTokenWithPayment: (u, p) => broadcastBatch(buildBuyTokenWithPayment(ctx(u), p))
 	};

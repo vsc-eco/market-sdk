@@ -6,6 +6,7 @@ import {
 	type Auction,
 	type BroadcastHook,
 	type BundleListing,
+	type BucketListing,
 	type Listing,
 	type MagiConfig,
 	type MarketClient,
@@ -24,6 +25,7 @@ import { UpdateListingForm } from './actions/UpdateListingForm.js';
 import { SweepForm } from './actions/SweepForm.js';
 import { BuyBundleForm } from './actions/BuyBundleForm.js';
 import { BundleCard } from './actions/BundleCard.js';
+import { BucketCard } from './actions/BucketCard.js';
 import { ListBundleForm } from './actions/ListBundleForm.js';
 import { AcceptSwapForm } from './actions/AcceptSwapForm.js';
 import { ProposeSwapForm } from './actions/ProposeSwapForm.js';
@@ -159,7 +161,10 @@ export interface MagiMarketPanelProps {
 	onSuccess?: (txId: string) => void;
 }
 
-type Tab = 'listings' | 'offers' | 'auctions' | 'mintspots' | 'tokens' | 'bundles' | 'swaps' | 'rentals';
+/** Native assets ride a `transfer.allow` intent instead of an approve leg. */
+const NATIVE_TOKENS = new Set(['hive', 'hbd']);
+
+type Tab = 'listings' | 'offers' | 'auctions' | 'mintspots' | 'tokens' | 'bundles' | 'buckets' | 'swaps' | 'rentals';
 
 /**
  * Top-level section, one level ABOVE the market tabs. "Market" is every
@@ -177,6 +182,7 @@ const EXPLORE_HELP =
 const TAB_HELP: Record<Tab, string> = {
 	listings: 'Fixed-price NFT sales — browse what others have listed and buy instantly. You can list your own NFTs for sale (and sweep several at once).',
 	bundles: 'Several NFTs sold together as one fixed-price lot. Buy a whole bundle in a single purchase, or create one from NFTs you own.',
+	buckets: 'Random-draw sales — packs, raffles and gacha. You pay a fixed price and the CONTRACT picks which NFT you get, so the pool and the odds are shown up front.',
 	auctions: 'Timed NFT auctions — English (ascending bids) or Dutch (price declines until someone buys). Place bids on others’ auctions, or start your own.',
 	rentals: 'Rent an NFT for a chosen duration at a price per block; the NFT is escrowed until the rental ends. Rent one that’s offered, or list your own for rental.',
 	mintspots: 'Sell the right to mint new editions of a collection you own. Buyers pay to mint a fresh edition directly to themselves.',
@@ -346,6 +352,8 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const [mintSpots, setMintSpots] = useState<MintSpotListing[]>([]);
 	const [tokenListings, setTokenListings] = useState<TokenListing[]>([]);
 	const [bundles, setBundles] = useState<BundleListing[]>([]);
+	const [buckets, setBuckets] = useState<BucketListing[]>([]);
+	const [drawing, setDrawing] = useState<number | null>(null);
 	const [swaps, setSwaps] = useState<SwapProposal[]>([]);
 	const [rentals, setRentals] = useState<RentalListing[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -588,6 +596,12 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						viewAccount ? { seller: viewAccount, activeOnly: true } : { activeOnly: true }
 					)
 				);
+			else if (tab === 'buckets')
+				setBuckets(
+					await client.provider.getBuckets(
+						viewAccount ? { seller: viewAccount, activeOnly: true } : { activeOnly: true }
+					)
+				);
 			else if (tab === 'swaps')
 				setSwaps(
 					await client.provider.getSwaps(
@@ -789,6 +803,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const scopedMintSpots = useMemo(() => mintSpots.filter((m) => inScope(m.lister)), [mintSpots, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 	const scopedTokenListings = useMemo(() => tokenListings.filter((tl) => inScope(tl.seller)), [tokenListings, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 	const scopedBundles = useMemo(() => bundles.filter((b) => inScope(b.seller)), [bundles, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
+	const scopedBuckets = useMemo(() => buckets.filter((b) => inScope(b.seller)), [buckets, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 	const scopedSwaps = useMemo(() => swaps.filter((s) => inScope(s.proposer)), [swaps, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 	const scopedRentals = useMemo(() => rentals.filter((r) => inScope(r.owner)), [rentals, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -890,6 +905,53 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	// handler serves NFT listings, token-sale listings, auctions, and
 	// mint-spot listings. The contract enforces owner-only + state rules
 	// (e.g. an auction with bids); failures surface in the error area.
+	/**
+	 * Draw from a bucket — one unit, or a whole pack.
+	 *
+	 * Payment mirrors every other purchase here: a native asset rides a
+	 * `transfer.allow` intent on the call itself, while a magi_token-style
+	 * asset needs an `approve` leg first, so the two are batched.
+	 *
+	 * There is no confirmation sheet on purpose. The buyer already sees the
+	 * price and the odds on the card, and a bucket draw has no parameters to
+	 * choose — quantity is fixed by the pack, and what you receive is the
+	 * contract's to decide.
+	 */
+	async function drawFromBucket(b: BucketListing, mode: 'single' | 'pack') {
+		if (!username || drawing !== null) return;
+		const total = mode === 'pack' ? b.pricePerPack : b.pricePerDraw;
+		setDrawing(b.bucketId);
+		setErr(null);
+		try {
+			const isNative = NATIVE_TOKENS.has((b.paymentToken || '').toLowerCase());
+			let txId: string;
+			if (isNative) {
+				const op = client.ops.buyFromBucketOp(
+					username,
+					{ bucketId: b.bucketId, mode, quantity: 1, maxTotalPrice: total },
+					[{ type: 'transfer.allow', args: { limit: total, token: b.paymentToken } }]
+				);
+				txId = (await client.broadcast(op)).txId;
+			} else {
+				const { txIds } = await client.buyFromBucketWithPayment(username, {
+					bucketId: b.bucketId,
+					mode,
+					quantity: 1,
+					maxTotalPrice: total,
+					paymentToken: b.paymentToken,
+					total
+				});
+				txId = txIds[txIds.length - 1];
+			}
+			void txId;
+			void load();
+		} catch (e) {
+			setErr(e instanceof Error ? e.message : String(e));
+		} finally {
+			setDrawing(null);
+		}
+	}
+
 	async function cancelListing(
 		kind:
 			| 'listing'
@@ -899,6 +961,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			| 'offer'
 			| 'settleAuction'
 			| 'bundle'
+			| 'bucket'
 			| 'swap'
 			| 'rental'
 			| 'endRental'
@@ -911,6 +974,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		try {
 			let op;
 			switch (kind) {
+				case 'bucket':
+					op = client.ops.delistBucketOp(username, { bucketId: id });
+					break;
 				case 'token':
 					op = client.ops.delistTokenOp(username, { listingId: id });
 					break;
@@ -956,6 +1022,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const TABS: Array<{ id: Tab; label: string }> = [
 		{ id: 'listings', label: 'Listings' },
 		{ id: 'bundles', label: 'Bundles' },
+		{ id: 'buckets', label: 'Buckets' },
 		{ id: 'auctions', label: 'Auctions' },
 		{ id: 'rentals', label: 'Rentals' },
 		{ id: 'mintspots', label: 'Mint spots' },
@@ -1646,6 +1713,29 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							canceling={canceling === `bundle:${b.bundleId}`}
 							onBuy={() => setSheet({ kind: 'buyBundle', bundle: b })}
 							onCancel={() => cancelListing('bundle', b.bundleId)}
+							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+						/>
+					))
+				)
+			)}
+
+			{section === 'market' && !err && !loading && tab === 'buckets' && (
+				scopedBuckets.length === 0 ? (
+					<div className="magi-market-state">
+						{scope === 'yours' ? "You don't have active buckets." : 'No active buckets from others.'}
+					</div>
+				) : (
+					scopedBuckets.map((b) => (
+						<BucketCard
+							key={b.bucketId}
+							client={client}
+							bucket={b}
+							mine={isSelf(b.seller)}
+							username={username}
+							busy={canceling === `bucket:${b.bucketId}` || drawing === b.bucketId}
+							onDraw={() => drawFromBucket(b, 'single')}
+							onBuyPack={() => drawFromBucket(b, 'pack')}
+							onCancel={() => cancelListing('bucket', b.bucketId)}
 							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
 						/>
 					))

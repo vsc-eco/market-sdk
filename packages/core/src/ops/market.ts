@@ -538,6 +538,168 @@ export function buildDelistBundle(ctx: MarketOpContext, p: { bundleId: number })
 }
 
 /* ============================================================ *
+ *  Buckets — fixed-price sales with a contract-chosen prize
+ * ============================================================ */
+
+/**
+ * A bucket is a pool of already-minted units sold at a fixed price, where the
+ * CONTRACT picks which unit the buyer receives. That is what makes packs,
+ * raffles and gacha machines possible: doing the pick client-side would not
+ * work, because listings are public and a buyer could simply read which token
+ * is the rare one and buy it directly.
+ *
+ * Because the contract enforces the pick, a bucket's contents can be fully
+ * public — which is the point. Buyers see exactly what is inside and can
+ * compute their own odds.
+ */
+export interface BucketEntryParam {
+	tokenId: string;
+	/** Units of this token in the bucket. >1 stocks an edition. */
+	amount: number;
+	/**
+	 * Which pool this entry belongs to (0-7). Pools are what turn "a random
+	 * card" into "a GUARANTEED rare": a pack slot draws from one pool only, so
+	 * an entry in the rare pool can only ever fill a rare slot.
+	 */
+	pool?: number;
+}
+
+/** Entries one call may add. The contract rejects more. */
+export const MAX_BUCKET_ENTRIES_PER_CALL = 24;
+/** Entries one bucket may hold in total. */
+export const MAX_BUCKET_ENTRIES = 512;
+
+export interface ListBucketParams {
+	nftContract: string;
+	entries: BucketEntryParam[];
+	paymentToken: string;
+	/** Price for ONE draw. "0" (or omitted) disables single draws. */
+	pricePerDraw?: string;
+	/** Price for one pack. "0" (or omitted) disables pack sales. */
+	pricePerPack?: string;
+	/**
+	 * Draws per pool, e.g. `[5]` is a flat five-card pack and `[4,1]` is four
+	 * from pool 0 plus one from pool 1 — the second is what "every pack has a
+	 * rare" means. Required whenever a pack price is set.
+	 */
+	packDraws?: number[];
+	expirationBlock?: number;
+}
+
+function assertBucketEntries(entries: BucketEntryParam[], where: string) {
+	if (entries.length === 0) throw new Error(`${where}: entries[] cannot be empty`);
+	if (entries.length > MAX_BUCKET_ENTRIES_PER_CALL) {
+		throw new Error(
+			`${where}: entries[] capped at ${MAX_BUCKET_ENTRIES_PER_CALL} per call ` +
+				`(got ${entries.length}) — stock the rest with addToBucket`
+		);
+	}
+	const seen = new Set<string>();
+	for (const e of entries) {
+		assertSafeAmount(e.amount, `${where}.entries.amount`);
+		if (e.amount < 1) throw new Error(`${where}: amount must be at least 1`);
+		if (e.pool !== undefined && (e.pool < 0 || e.pool > 7)) {
+			throw new Error(`${where}: pool must be 0-7, got ${e.pool}`);
+		}
+		if (seen.has(e.tokenId)) {
+			throw new Error(`${where}: duplicate tokenId "${e.tokenId}" — one entry per token`);
+		}
+		seen.add(e.tokenId);
+	}
+}
+
+/**
+ * Open a bucket. The seller keeps custody: the market moves a unit per draw,
+ * so the marketplace must be approved on the NFT contract first (see
+ * `buildListBucketFlow`).
+ */
+export function buildListBucket(ctx: MarketOpContext, p: ListBucketParams): MarketOpBundle {
+	assertBucketEntries(p.entries, 'listBucket');
+	const perDraw = p.pricePerDraw ?? '0';
+	const perPack = p.pricePerPack ?? '0';
+	if (perDraw === '0' && perPack === '0') {
+		throw new Error('listBucket: set pricePerDraw, pricePerPack, or both');
+	}
+	const packDraws = p.packDraws ?? [];
+	if (perPack !== '0' && packDraws.length === 0) {
+		throw new Error('listBucket: a pack price needs packDraws, e.g. [5] or [4,1]');
+	}
+	if (packDraws.some((d) => d < 0)) throw new Error('listBucket: packDraws cannot be negative');
+	return bundle(ctx, 'listBucket', {
+		nftContract: p.nftContract,
+		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, pool: e.pool ?? 0 })),
+		paymentToken: p.paymentToken,
+		pricePerDraw: perDraw,
+		pricePerPack: perPack,
+		packDraws,
+		expirationBlock: p.expirationBlock ?? 0
+	});
+}
+
+/**
+ * Add stock to a bucket that already exists.
+ *
+ * A large bucket cannot be opened in one transaction, so stocking is chunked:
+ * `listBucket` opens it with a first batch and `addToBucket` appends the rest.
+ * Append-only — a token already in the bucket cannot be added again.
+ */
+export function buildAddToBucket(
+	ctx: MarketOpContext,
+	p: { bucketId: number; entries: BucketEntryParam[] }
+): MarketOpBundle {
+	assertBucketEntries(p.entries, 'addToBucket');
+	return bundle(ctx, 'addToBucket', {
+		bucketId: p.bucketId,
+		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, pool: e.pool ?? 0 }))
+	});
+}
+
+export interface BuyFromBucketParams {
+	bucketId: number;
+	/** `'single'` draws one unit; `'pack'` draws a whole pack. */
+	mode?: 'single' | 'pack';
+	/** How many singles, or how many packs. Defaults to 1. */
+	quantity?: number;
+	/** Optional slippage guard on the total, in the payment token's units. */
+	maxTotalPrice?: string;
+}
+
+/**
+ * Buy from a bucket.
+ *
+ * Must be signed by a real account, not routed through a contract: the market
+ * rejects contract callers, because otherwise a buyer could wrap the purchase,
+ * inspect the drawn token and abort on a bad result — retrying until they win,
+ * turning a fair draw into a pick.
+ */
+export function buildBuyFromBucket(
+	ctx: MarketOpContext,
+	p: BuyFromBucketParams,
+	intents?: VscIntent[]
+): MarketOpBundle {
+	const quantity = p.quantity ?? 1;
+	assertSafeAmount(quantity, 'buyFromBucket.quantity');
+	if (quantity < 1) throw new Error('buyFromBucket: quantity must be at least 1');
+	return bundle(
+		ctx,
+		'buyFromBucket',
+		{
+			bucketId: p.bucketId,
+			mode: p.mode ?? 'single',
+			quantity,
+			maxTotalPrice: p.maxTotalPrice ?? ''
+		},
+		undefined,
+		intents
+	);
+}
+
+/** Seller: close a bucket. Unsold stock simply stays with the seller. */
+export function buildDelistBucket(ctx: MarketOpContext, p: { bucketId: number }): MarketOpBundle {
+	return bundle(ctx, 'delistBucket', { bucketId: p.bucketId });
+}
+
+/* ============================================================ *
  *  NFT-for-NFT swaps
  * ============================================================ */
 
@@ -790,6 +952,25 @@ export function buildSellNftFlow(
 	return out;
 }
 
+/**
+ * Open a bucket, granting the market approval first.
+ *
+ * A bucket needs blanket operator approval rather than per-token allowances:
+ * the contract draws an unpredictable token on each purchase, so it cannot
+ * know in advance which token ids it will need to move.
+ */
+export function buildListBucketFlow(
+	ctx: MarketOpContext,
+	p: ListBucketParams & { skipApproval?: boolean }
+): MarketOpBundle[] {
+	const out: MarketOpBundle[] = [];
+	if (!p.skipApproval) {
+		out.push(buildNftSetApprovalForAll(ctx, { nftContract: p.nftContract, approved: true }));
+	}
+	out.push(buildListBucket(ctx, p));
+	return out;
+}
+
 /** Same as `buildSellNftFlow` but the second leg is an auction. */
 export function buildAuctionNftFlow(
 	ctx: MarketOpContext,
@@ -916,6 +1097,27 @@ export function buildBuyWithPayment(
 	return [
 		buildTokenApprove(ctx, { paymentToken: p.paymentToken, amount: p.total }),
 		buildBuy(ctx, { listingId: p.listingId, amount: p.amount })
+	];
+}
+
+/**
+ * Draw from a bucket paid in a magi_token-style asset: `approve(market,total)`
+ * on the token contract, then `buyFromBucket`. A native-asset (HBD/HIVE) draw
+ * needs no approve leg — pass a `transfer.allow` intent to `buildBuyFromBucket`
+ * instead.
+ */
+export function buildBuyFromBucketWithPayment(
+	ctx: MarketOpContext,
+	p: BuyFromBucketParams & { paymentToken: string; total: string }
+): MarketOpBundle[] {
+	return [
+		buildTokenApprove(ctx, { paymentToken: p.paymentToken, amount: p.total }),
+		buildBuyFromBucket(ctx, {
+			bucketId: p.bucketId,
+			mode: p.mode,
+			quantity: p.quantity,
+			maxTotalPrice: p.maxTotalPrice
+		})
 	];
 }
 
