@@ -1767,3 +1767,97 @@
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 	text-align: left;
 }
+
+/* ---- wizard step indicator (multi-step forms) ---- */
+.magi-market-wizard-steps {
+	display: flex;
+	gap: 0.25rem;
+	list-style: none;
+	margin: 0 0 1rem;
+	padding: 0;
+	/* Narrow modals scroll rather than wrap: a step strip that reflows to two
+	   lines reads as two separate controls. */
+	overflow-x: auto;
+	min-width: max-content;
+	scrollbar-width: none;
+}
+.magi-market-wizard-steps::-webkit-scrollbar {
+	display: none;
+}
+.magi-market-wizard-step {
+	flex: 0 0 auto;
+}
+.magi-market-wizard-step-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.6rem;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.82rem;
+	cursor: default;
+	white-space: nowrap;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-btn:not(:disabled) {
+	cursor: pointer;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-btn:not(:disabled):hover {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-wizard-step.current .magi-market-wizard-step-btn {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-wizard-step-dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.1);
+	font-size: 0.72rem;
+	font-weight: 600;
+}
+.magi-market-wizard-step.current .magi-market-wizard-step-dot {
+	background: var(--magi-accent);
+	color: #fff;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-dot {
+	background: var(--magi-green);
+	color: #fff;
+}
+.magi-market-wizard-nav {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+}
+.magi-market-wizard-nav .magi-market-submit {
+	margin-top: 0;
+}
+/* The review step's summary: label/value rows, not a paragraph — a listing's
+   terms are scanned, not read. */
+.magi-market-review-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.35rem 0;
+	border-bottom: 1px solid var(--magi-card-border);
+	font-size: 0.88rem;
+}
+.magi-market-review-row:last-child {
+	border-bottom: none;
+}
+.magi-market-review-row dt {
+	color: var(--magi-text-secondary);
+	margin: 0;
+}
+.magi-market-review-row dd {
+	margin: 0;
+	text-align: right;
+	color: var(--magi-text);
+}

@@ -7,6 +7,7 @@ import { TokenPicker } from '../components/TokenPicker.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
 import { NftMultiPicker, type NftMultiPick } from '../components/NftMultiPicker.js';
 import { canTransferNft } from '../components/nftFilters.js';
+import { WizardSteps } from '../components/WizardSteps.js';
 
 export interface ListBucketFormProps {
 	client: MarketClient;
@@ -44,6 +45,7 @@ export function ListBucketForm({
 }: ListBucketFormProps) {
 	const tokenMeta = useTokenMeta(client.config);
 
+	const [step, setStep] = useState(0);
 	const [mode, setMode] = useState<'simple' | 'pack'>('simple');
 	const [picks, setPicks] = useState<NftMultiPick[]>([]);
 	const [rarePicks, setRarePicks] = useState<NftMultiPick[]>([]);
@@ -76,26 +78,49 @@ export function ListBucketForm({
 		}
 	};
 
-	const problem = useMemo(() => {
-		if (picks.length === 0) return 'Pick at least one NFT.';
-		if (totalEntries > MAX_ENTRIES) return `Up to ${MAX_ENTRIES} NFTs per bucket here.`;
-		if (paymentToken.trim() === '') return 'Choose a payment token.';
-		if (mode === 'simple' && !positive(microDraw)) return 'Set a price per draw.';
-		if (mode === 'pack') {
-			if (rarePicks.length === 0) return 'Pick at least one rare — that is what the pack guarantees.';
+	const STEPS = ['Type', 'NFTs', 'Price', 'Review'];
+
+	/**
+	 * What is wrong with each step, or null if it is complete.
+	 *
+	 * Validated per step rather than all at once so the wizard can block Next
+	 * with the reason attached to the field the user is looking at, instead of
+	 * failing at the end with a message about a screen they have left.
+	 */
+	const stepProblem = useMemo<(string | null)[]>(() => {
+		const commonUnits = picks.reduce((a, p) => a + p.amount, 0);
+		const nftProblem = (() => {
+			if (picks.length === 0)
+				return mode === 'pack' ? 'Pick the commons that fill most of the pack.' : 'Pick at least one NFT.';
+			if (totalEntries > MAX_ENTRIES) return `Up to ${MAX_ENTRIES} NFTs per bucket here.`;
+			if (mode === 'pack' && rarePicks.length === 0)
+				return 'Pick at least one rare — that is what the pack guarantees.';
+			return null;
+		})();
+		const priceProblem = (() => {
+			if (paymentToken.trim() === '') return 'Choose a payment token.';
+			if (mode === 'simple') return positive(microDraw) ? null : 'Set a price per draw.';
 			if (!positive(microPack)) return 'Set a price per pack.';
 			if (!Number.isInteger(commonsPerPack) || commonsPerPack < 1) return 'Commons per pack must be 1 or more.';
-			// A pack promising more commons than exist can never be filled, and
-			// the contract would refuse every purchase rather than the listing.
-			const commonUnits = picks.reduce((a, p) => a + p.amount, 0);
-			if (commonUnits < commonsPerPack) {
+			// A pack promising more commons than exist lists happily and then
+			// refuses EVERY purchase — the buyer discovers it, not the seller.
+			if (commonUnits < commonsPerPack)
 				return `Only ${commonUnits} common unit${commonUnits === 1 ? '' : 's'} picked — a pack needs ${commonsPerPack}.`;
-			}
-		}
-		return null;
+			return null;
+		})();
+		return [null, nftProblem, priceProblem, nftProblem ?? priceProblem];
 	}, [picks, rarePicks, mode, paymentToken, microDraw, microPack, commonsPerPack, totalEntries]);
 
-	const valid = problem === null;
+	const problem = stepProblem[step];
+	const valid = stepProblem[STEPS.length - 1] === null;
+
+	/** Units in each pool, used for the odds preview on the review step. */
+	const commonUnits = picks.reduce((a, p) => a + p.amount, 0);
+	const rareUnits = rarePicks.reduce((a, p) => a + p.amount, 0);
+	const packsPossible =
+		mode === 'pack' && commonsPerPack > 0
+			? Math.min(Math.floor(commonUnits / commonsPerPack), rareUnits)
+			: 0;
 
 	async function handleSubmit() {
 		if (!valid || submitting) return;
@@ -136,7 +161,16 @@ export function ListBucketForm({
 	return (
 		<Modal
 			title="Open a bucket"
-			subtitle="A fixed-price sale where the contract picks which NFT the buyer gets."
+			subtitle={
+				txId
+					? undefined
+					: [
+							'A fixed-price sale where the contract picks which NFT the buyer gets.',
+							'Pick what goes in — the buyer sees the pool and the odds.',
+							'What a draw costs.',
+							'Check it over, then open.'
+						][step]
+			}
 			onClose={onClose}
 		>
 			{txId ? (
@@ -148,119 +182,207 @@ export function ListBucketForm({
 				</>
 			) : (
 				<>
-					<Field
-						label="Bucket type"
-						hint={
-							mode === 'simple'
-								? 'One pool. Every unit is equally likely, so more copies of a card make it commoner.'
-								: 'Two pools. Each pack is N commons plus ONE guaranteed rare.'
-						}
-					>
-						<div style={{ display: 'flex', gap: '0.5rem' }}>
-							<button
-								type="button"
-								className={`magi-market-submit ${mode === 'simple' ? '' : 'ghost'}`}
-								style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
-								disabled={submitting}
-								onClick={() => setMode('simple')}
-							>
-								Simple draw
-							</button>
-							<button
-								type="button"
-								className={`magi-market-submit ${mode === 'pack' ? '' : 'ghost'}`}
-								style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
-								disabled={submitting}
-								onClick={() => setMode('pack')}
-							>
-								Pack with a guaranteed rare
-							</button>
-						</div>
-					</Field>
+					<WizardSteps steps={STEPS} current={step} onGoTo={setStep} disabled={submitting} />
 
-					<NftMultiPicker
-						config={client.config}
-						username={username}
-						value={picks}
-						onChange={setPicks}
-						label={mode === 'pack' ? 'Commons — the bulk of the pack' : `NFTs in the bucket (max ${MAX_ENTRIES})`}
-						lockCollection={lockCollection}
-						filterItem={(i) => canTransferNft(i, username)}
-						max={MAX_ENTRIES}
-						disabled={submitting}
-					/>
+					{step === 0 && (
+						<Field
+							label="What are you selling?"
+							hint={
+								mode === 'simple'
+									? 'One pool. Every unit is equally likely, so more copies of a card make it commoner.'
+									: 'Two pools. Each pack is N commons plus ONE guaranteed rare.'
+							}
+						>
+							<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+								<button
+									type="button"
+									className={`magi-market-submit ${mode === 'simple' ? '' : 'ghost'}`}
+									style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
+									disabled={submitting}
+									onClick={() => setMode('simple')}
+								>
+									Simple draw
+								</button>
+								<button
+									type="button"
+									className={`magi-market-submit ${mode === 'pack' ? '' : 'ghost'}`}
+									style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
+									disabled={submitting}
+									onClick={() => setMode('pack')}
+								>
+									Pack with a guaranteed rare
+								</button>
+							</div>
+						</Field>
+					)}
 
-					{mode === 'pack' && (
+					{step === 1 && (
 						<>
 							<NftMultiPicker
 								config={client.config}
 								username={username}
-								value={rarePicks}
-								onChange={setRarePicks}
-								label="Rares — one of these is guaranteed in every pack"
+								value={picks}
+								onChange={setPicks}
+								label={mode === 'pack' ? 'Commons — the bulk of the pack' : `NFTs in the bucket (max ${MAX_ENTRIES})`}
 								lockCollection={lockCollection}
 								filterItem={(i) => canTransferNft(i, username)}
 								max={MAX_ENTRIES}
 								disabled={submitting}
 							/>
-							<Field label="Commons per pack" hint="Plus one guaranteed rare on top.">
-								<TextInput
-									type="number"
-									inputMode="numeric"
-									min={1}
-									value={packCommons}
-									onChange={setPackCommons}
+							{mode === 'pack' && (
+								<NftMultiPicker
+									config={client.config}
+									username={username}
+									value={rarePicks}
+									onChange={setRarePicks}
+									label="Rares — one of these is guaranteed in every pack"
+									lockCollection={lockCollection}
+									filterItem={(i) => canTransferNft(i, username)}
+									max={MAX_ENTRIES}
 									disabled={submitting}
 								/>
-							</Field>
+							)}
 						</>
 					)}
 
-					<TokenPicker
-						config={client.config}
-						value={paymentToken}
-						onChange={setPaymentToken}
-						disabled={submitting}
-					/>
-
-					{mode === 'simple' ? (
-						<Field label="Price per draw">
-							<TextInput
-								inputMode="decimal"
-								value={pricePerDraw}
-								onChange={setPricePerDraw}
-								placeholder={tokenMeta.smallestUnit(paymentToken)}
+					{step === 2 && (
+						<>
+							<TokenPicker
+								config={client.config}
+								value={paymentToken}
+								onChange={setPaymentToken}
 								disabled={submitting}
 							/>
-						</Field>
-					) : (
-						<Field label="Price per pack" hint={`Each pack: ${commonsPerPack || '?'} commons + 1 rare.`}>
-							<TextInput
-								inputMode="decimal"
-								value={pricePerPack}
-								onChange={setPricePerPack}
-								placeholder={tokenMeta.smallestUnit(paymentToken)}
-								disabled={submitting}
-							/>
-						</Field>
+							{mode === 'simple' ? (
+								<Field label="Price per draw">
+									<TextInput
+										inputMode="decimal"
+										value={pricePerDraw}
+										onChange={setPricePerDraw}
+										placeholder={tokenMeta.smallestUnit(paymentToken)}
+										disabled={submitting}
+									/>
+								</Field>
+							) : (
+								<>
+									<Field label="Commons per pack" hint="Plus one guaranteed rare on top.">
+										<TextInput
+											type="number"
+											inputMode="numeric"
+											min={1}
+											value={packCommons}
+											onChange={setPackCommons}
+											disabled={submitting}
+										/>
+									</Field>
+									<Field label="Price per pack" hint={`Each pack: ${commonsPerPack || '?'} commons + 1 rare.`}>
+										<TextInput
+											inputMode="decimal"
+											value={pricePerPack}
+											onChange={setPricePerPack}
+											placeholder={tokenMeta.smallestUnit(paymentToken)}
+											disabled={submitting}
+										/>
+									</Field>
+								</>
+							)}
+						</>
 					)}
 
-					<p className="magi-market-field-hint">
-						You keep the NFTs until they are drawn. Opening a bucket also approves the
-						marketplace to move units of this collection on your behalf.
-					</p>
+					{step === 3 && (
+						<>
+							<dl style={{ margin: '0 0 0.75rem' }}>
+								<div className="magi-market-review-row">
+									<dt>Type</dt>
+									<dd>{mode === 'pack' ? `Pack of ${commonsPerPack} + 1 guaranteed rare` : 'Simple draw'}</dd>
+								</div>
+								<div className="magi-market-review-row">
+									<dt>NFTs</dt>
+									<dd>
+										{picks.length} common{picks.length === 1 ? '' : 's'} ({commonUnits} unit
+										{commonUnits === 1 ? '' : 's'})
+										{mode === 'pack' && (
+											<>
+												{' · '}
+												{rarePicks.length} rare{rarePicks.length === 1 ? '' : 's'} ({rareUnits} unit
+												{rareUnits === 1 ? '' : 's'})
+											</>
+										)}
+									</dd>
+								</div>
+								<div className="magi-market-review-row">
+									<dt>Price</dt>
+									<dd>
+										{mode === 'pack'
+											? `${pricePerPack || '—'} ${tokenMeta.symbol(paymentToken)} per pack`
+											: `${pricePerDraw || '—'} ${tokenMeta.symbol(paymentToken)} per draw`}
+									</dd>
+								</div>
+								{mode === 'pack' ? (
+									<div className="magi-market-review-row">
+										<dt>Packs available</dt>
+										<dd>{packsPossible}</dd>
+									</div>
+								) : (
+									<div className="magi-market-review-row">
+										<dt>Draws available</dt>
+										<dd>{commonUnits}</dd>
+									</div>
+								)}
+								{mode === 'simple' && commonUnits > 0 && (
+									<div className="magi-market-review-row">
+										<dt>Rarest card</dt>
+										<dd>
+											{(() => {
+												const rarest = picks.reduce((a, b) => (a.amount <= b.amount ? a : b));
+												const pct = (rarest.amount / commonUnits) * 100;
+												return `#${rarest.tokenId} — ${pct < 0.1 ? '<0.1' : pct.toFixed(1)}% per draw`;
+											})()}
+										</dd>
+									</div>
+								)}
+							</dl>
+							<p className="magi-market-field-hint">
+								You keep the NFTs until they are drawn. Opening a bucket also approves the
+								marketplace to move units of this collection, so expect TWO signature prompts.
+							</p>
+						</>
+					)}
 
 					{problem && !error && <p className="magi-market-field-hint">{problem}</p>}
 					{error && <p className="magi-market-status error">{error}</p>}
 
-					<button
-						type="button"
-						className="magi-market-submit"
-						disabled={!valid || submitting}
-						onClick={handleSubmit}
-					>
-						{submitting ? 'Opening…' : `Open bucket (${totalEntries} NFT${totalEntries === 1 ? '' : 's'})`}
-					</button>
+					<div className="magi-market-wizard-nav">
+						{step > 0 && (
+							<button
+								type="button"
+								className="magi-market-submit ghost"
+								disabled={submitting}
+								onClick={() => setStep(step - 1)}
+							>
+								Back
+							</button>
+						)}
+						{step < STEPS.length - 1 ? (
+							<button
+								type="button"
+								className="magi-market-submit"
+								disabled={submitting || problem !== null}
+								onClick={() => setStep(step + 1)}
+							>
+								Next
+							</button>
+						) : (
+							<button
+								type="button"
+								className="magi-market-submit"
+								disabled={!valid || submitting}
+								onClick={handleSubmit}
+							>
+								{submitting ? 'Opening…' : `Open bucket (${totalEntries} NFT${totalEntries === 1 ? '' : 's'})`}
+							</button>
+						)}
+					</div>
 				</>
 			)}
 		</Modal>
