@@ -224,6 +224,7 @@ export function ListBucketForm({
 			) : (
 				<>
 					<WizardSteps steps={STEPS} current={step} onGoTo={setStep} disabled={submitting} />
+					<div className="magi-market-bucketform">
 
 					{step === 0 && (
 						<Field
@@ -274,7 +275,7 @@ export function ListBucketForm({
 												onClick={() => setOpenStack(open ? -1 : i)}
 											>
 												<span className="magi-market-stack-caret">{open ? '▾' : '▸'}</span>
-												<span className="magi-market-stack-title">{stack.name}</span>
+												{open ? null : <span className="magi-market-stack-title">{stack.name}</span>}
 												{!open && (
 													<span className="magi-market-stack-summary">
 														{stack.picks.length} NFT{stack.picks.length === 1 ? '' : 's'} · {u} unit
@@ -283,6 +284,13 @@ export function ListBucketForm({
 													</span>
 												)}
 											</button>
+											{open && (
+												<TextInput
+													value={stack.name}
+													onChange={(v) => updateStack(i, { name: v })}
+													disabled={submitting}
+												/>
+											)}
 											{open && sellPacks && (
 												<label className="magi-market-stack-slots">
 													<span>per pack</span>
@@ -313,11 +321,6 @@ export function ListBucketForm({
 										</div>
 										{open && (
 											<>
-												<TextInput
-													value={stack.name}
-													onChange={(v) => updateStack(i, { name: v })}
-													disabled={submitting}
-												/>
 												<NftMultiPicker
 													config={client.config}
 													username={username}
@@ -478,6 +481,8 @@ export function ListBucketForm({
 							</p>
 						</>
 					)}
+
+					</div>
 
 					{problem && !error && <p className="magi-market-field-hint">{problem}</p>}
 					{error && <p className="magi-market-status error">{error}</p>}

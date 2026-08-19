@@ -931,7 +931,7 @@
 	 * dropdowns inside the card can extend past the card bounds. The card
 	 * sits flush at the top of the overlay; a small margin keeps it off
 	 * the very edge. */
-	margin: clamp(0.5rem, 5vh, 4rem) 0;
+	margin: clamp(0.5rem, 3vh, 2.5rem) 0;
 	overflow: visible;
 }
 .magi-market-modal-card--wide {
@@ -1837,28 +1837,14 @@
 	background: var(--magi-green);
 	color: #fff;
 }
-/* The nav sticks to the bottom of the viewport while the dialog is taller than
-   it, so Back/Next are always reachable without scrolling to the end.
- *
- * Sticky rather than a fixed footer with an internal scroll area, because the
- * card deliberately does NOT scroll internally — the NFT picker's dropdowns
- * need to escape the card bounds, and an overflow container would clip them.
- * The overlay is the scroll container, so sticky resolves against it. */
+/* Plain flow, deliberately. A sticky footer kept the buttons reachable but did
+   it by covering the content underneath — trading one problem for another. The
+   dialog is instead SIZED to fit: the picker grid below carries the height cap,
+   so the card stays short enough that the buttons are simply on screen. */
 .magi-market-wizard-nav {
 	display: flex;
 	gap: 0.5rem;
 	margin-top: 0.75rem;
-	position: sticky;
-	bottom: 0;
-	/* Span the card's padding so content scrolling underneath is covered
-	   edge to edge rather than showing through a 1.1rem gutter. */
-	margin-left: -1.1rem;
-	margin-right: -1.1rem;
-	margin-bottom: -1.1rem;
-	padding: 0.75rem 1.1rem 1.1rem;
-	background: var(--magi-modal-bg);
-	border-top: 1px solid var(--magi-card-border);
-	z-index: 2;
 }
 .magi-market-wizard-nav .magi-market-submit {
 	margin-top: 0;
@@ -1988,4 +1974,37 @@
 }
 .magi-market-stack-slots input {
 	width: 4.5rem;
+}
+
+
+/* ---- bucket wizard: use the width for NFTs, not for stretching inputs ---- */
+/* The card is 520px on desktop so the picker can show three NFTs per row. That
+   width is for the GRID — a text input stretched to 485px is just a bigger text
+   input, and a line of prose that long is harder to read, not easier. */
+.magi-market-bucketform .magi-market-field,
+.magi-market-bucketform .magi-market-check,
+.magi-market-bucketform .magi-market-field-hint {
+	max-width: 34rem;
+}
+.magi-market-bucketform .magi-market-field > input,
+.magi-market-bucketform .magi-market-field > .magi-market-select,
+.magi-market-bucketform .magi-market-stack-slots input {
+	max-width: 22rem;
+}
+.magi-market-bucketform .magi-market-stack-slots input {
+	max-width: 5rem;
+}
+/* The grid is the one thing that SHOULD have the whole width. */
+.magi-market-bucketform .magi-market-grid {
+	max-width: none;
+	/* …and the one thing tall enough to push the buttons off screen, so it
+	   scrolls inside itself. Safe here where a flat grid of tiles is being
+	   bounded — unlike the card, which must not scroll because the picker's
+	   dropdowns need to escape it. */
+	/* 34vh, not more: the fixed chrome around it (title, steps, stack headers,
+	   the add button, the nav) is ~380px, so a taller grid pushes the buttons
+	   off a 700px-tall window — a laptop with a browser bar open. */
+	max-height: 34vh;
+	overflow-y: auto;
+	padding-right: 0.2rem;
 }
