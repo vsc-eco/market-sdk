@@ -2008,3 +2008,50 @@
 	overflow-y: auto;
 	padding-right: 0.2rem;
 }
+
+/* ---- full-panel views (used instead of a modal for real work) ---- */
+.magi-market-view {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+}
+.magi-market-view-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.75rem;
+	padding-bottom: 0.6rem;
+	border-bottom: 1px solid var(--magi-card-border);
+}
+.magi-market-view-back {
+	flex: 0 0 auto;
+	padding: 0.35rem 0.7rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.82rem;
+	cursor: pointer;
+}
+.magi-market-view-back:hover {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-view-titles {
+	min-width: 0;
+}
+.magi-market-view-title {
+	margin: 0;
+	font-size: 1rem;
+}
+.magi-market-view-subtitle {
+	margin: 0.15rem 0 0;
+	font-size: 0.82rem;
+	color: var(--magi-text-secondary);
+}
+/* In a full-width view the grid has room, so let it breathe rather than
+   inheriting the dialog's height cap — there is no dialog left to overflow. */
+.magi-market-view .magi-market-bucketform .magi-market-grid {
+	max-height: none;
+	overflow-y: visible;
+}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type * as React from 'react';
 import type { MarketClient } from '@vsc.eco/market-sdk';
 import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
@@ -9,6 +10,7 @@ import { NftMultiPicker, type NftMultiPick } from '../components/NftMultiPicker.
 import { canTransferNft } from '../components/nftFilters.js';
 import { BlockDurationInput } from '../components/BlockDurationInput.js';
 import { WizardSteps } from '../components/WizardSteps.js';
+import { PanelView } from '../components/PanelView.js';
 
 export interface ListBucketFormProps {
 	client: MarketClient;
@@ -16,6 +18,15 @@ export interface ListBucketFormProps {
 	defaultNftContract?: string;
 	onSuccess?: (txId: string) => void;
 	onClose: () => void;
+	/**
+	 * Render as a full-panel view rather than a dialog.
+	 *
+	 * Preferred for this form: it holds an NFT picker, and a dialog caps its
+	 * own height so the grid gets squeezed and the buttons drift out of reach.
+	 * The modal path is kept so the form can still be opened from a context
+	 * where taking over the panel would lose the user's place.
+	 */
+	inline?: boolean;
 }
 
 /** The contract caps one call at 24 entries; more go in via addToBucket. */
@@ -67,7 +78,8 @@ export function ListBucketForm({
 	username,
 	defaultNftContract,
 	onSuccess,
-	onClose
+	onClose,
+	inline
 }: ListBucketFormProps) {
 	const tokenMeta = useTokenMeta(client.config);
 
@@ -198,9 +210,31 @@ export function ListBucketForm({
 		}
 	}
 
+	/**
+	 * One body, two containers. Inline is the default the panel uses; the modal
+	 * remains for callers that must not lose their place behind it.
+	 */
+	const Shell = ({
+		title,
+		subtitle,
+		children
+	}: {
+		title: string;
+		subtitle?: string;
+		children: React.ReactNode;
+	}) =>
+		inline ? (
+			<PanelView title={title} subtitle={subtitle} onBack={onClose}>
+				{children}
+			</PanelView>
+		) : (
+			<Modal wide title={title} subtitle={subtitle} onClose={onClose}>
+				{children}
+			</Modal>
+		);
+
 	return (
-		<Modal
-			wide
+		<Shell
 			title="Open a bucket"
 			subtitle={
 				txId
@@ -212,7 +246,6 @@ export function ListBucketForm({
 							'Check it over, then open.'
 						][step]
 			}
-			onClose={onClose}
 		>
 			{txId ? (
 				<>
@@ -520,6 +553,6 @@ export function ListBucketForm({
 					</div>
 				</>
 			)}
-		</Modal>
+		</Shell>
 	);
 }
