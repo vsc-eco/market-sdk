@@ -1837,10 +1837,28 @@
 	background: var(--magi-green);
 	color: #fff;
 }
+/* The nav sticks to the bottom of the viewport while the dialog is taller than
+   it, so Back/Next are always reachable without scrolling to the end.
+ *
+ * Sticky rather than a fixed footer with an internal scroll area, because the
+ * card deliberately does NOT scroll internally — the NFT picker's dropdowns
+ * need to escape the card bounds, and an overflow container would clip them.
+ * The overlay is the scroll container, so sticky resolves against it. */
 .magi-market-wizard-nav {
 	display: flex;
 	gap: 0.5rem;
 	margin-top: 0.75rem;
+	position: sticky;
+	bottom: 0;
+	/* Span the card's padding so content scrolling underneath is covered
+	   edge to edge rather than showing through a 1.1rem gutter. */
+	margin-left: -1.1rem;
+	margin-right: -1.1rem;
+	margin-bottom: -1.1rem;
+	padding: 0.75rem 1.1rem 1.1rem;
+	background: var(--magi-modal-bg);
+	border-top: 1px solid var(--magi-card-border);
+	z-index: 2;
 }
 .magi-market-wizard-nav .magi-market-submit {
 	margin-top: 0;
@@ -1909,6 +1927,42 @@
 	border-radius: 12px;
 	padding: 0.7rem;
 	margin-bottom: 0.7rem;
+}
+.magi-market-stack.open {
+	border-color: var(--magi-accent);
+}
+/* The whole header row is the toggle, so a collapsed stack is one big target
+   rather than a caret you have to hit. */
+.magi-market-stack-toggle {
+	display: flex;
+	align-items: baseline;
+	gap: 0.45rem;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--magi-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.magi-market-stack-caret {
+	flex: 0 0 auto;
+	color: var(--magi-text-secondary);
+	font-size: 0.75rem;
+}
+.magi-market-stack-title {
+	font-weight: 600;
+	flex: 0 0 auto;
+}
+.magi-market-stack-summary {
+	color: var(--magi-text-secondary);
+	font-size: 0.8rem;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .magi-market-stack-head {
 	display: flex;

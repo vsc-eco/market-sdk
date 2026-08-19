@@ -75,6 +75,12 @@ export function ListBucketForm({
 	const [sellSingles, setSellSingles] = useState(true);
 	const [sellPacks, setSellPacks] = useState(false);
 	const [stacks, setStacks] = useState<Stack[]>([newStack(0, '0')]);
+	/**
+	 * Which stack is expanded. Only one at a time: each stack carries a full NFT
+	 * picker, so leaving them all open buries the Add/Next controls under
+	 * several screens of grid and makes the wizard feel like a scroll.
+	 */
+	const [openStack, setOpenStack] = useState(0);
 	const [paymentToken, setPaymentToken] = useState('');
 	const [pricePerDraw, setPricePerDraw] = useState('');
 	const [pricePerPack, setPricePerPack] = useState('');
@@ -194,6 +200,7 @@ export function ListBucketForm({
 
 	return (
 		<Modal
+			wide
 			title="Open a bucket"
 			subtitle={
 				txId
@@ -253,58 +260,94 @@ export function ListBucketForm({
 
 					{step === 1 && (
 						<>
-							{stacks.map((stack, i) => (
-								<div key={i} className="magi-market-stack">
-									<div className="magi-market-stack-head">
-										<TextInput
-											value={stack.name}
-											onChange={(v) => updateStack(i, { name: v })}
-											disabled={submitting}
-										/>
-										{sellPacks && (
-											<label className="magi-market-stack-slots">
-												<span>per pack</span>
-												<TextInput
-													type="number"
-													inputMode="numeric"
-													min={0}
-													value={stack.perPack}
-													onChange={(v) => updateStack(i, { perPack: v })}
-													disabled={submitting}
-												/>
-											</label>
-										)}
-										{stacks.length > 1 && (
+							{stacks.map((stack, i) => {
+								const open = openStack === i;
+								const u = units(stack);
+								return (
+									<div key={i} className={`magi-market-stack${open ? ' open' : ''}`}>
+										<div className="magi-market-stack-head">
 											<button
 												type="button"
-												className="magi-market-submit ghost"
-												style={{ width: 'auto', padding: '0.25rem 0.6rem' }}
+												className="magi-market-stack-toggle"
+												aria-expanded={open}
 												disabled={submitting}
-												onClick={() => setStacks((prev) => prev.filter((_, j) => j !== i))}
+												onClick={() => setOpenStack(open ? -1 : i)}
 											>
-												Remove
+												<span className="magi-market-stack-caret">{open ? '▾' : '▸'}</span>
+												<span className="magi-market-stack-title">{stack.name}</span>
+												{!open && (
+													<span className="magi-market-stack-summary">
+														{stack.picks.length} NFT{stack.picks.length === 1 ? '' : 's'} · {u} unit
+														{u === 1 ? '' : 's'}
+														{sellPacks && slots(stack) > 0 && ` · ${slots(stack)}/pack`}
+													</span>
+												)}
 											</button>
+											{open && sellPacks && (
+												<label className="magi-market-stack-slots">
+													<span>per pack</span>
+													<TextInput
+														type="number"
+														inputMode="numeric"
+														min={0}
+														value={stack.perPack}
+														onChange={(v) => updateStack(i, { perPack: v })}
+														disabled={submitting}
+													/>
+												</label>
+											)}
+											{open && stacks.length > 1 && (
+												<button
+													type="button"
+													className="magi-market-submit ghost"
+													style={{ width: 'auto', padding: '0.25rem 0.6rem' }}
+													disabled={submitting}
+													onClick={() => {
+														setStacks((prev) => prev.filter((_, j) => j !== i));
+														setOpenStack((o) => (o >= i ? Math.max(0, o - 1) : o));
+													}}
+												>
+													Remove
+												</button>
+											)}
+										</div>
+										{open && (
+											<>
+												<TextInput
+													value={stack.name}
+													onChange={(v) => updateStack(i, { name: v })}
+													disabled={submitting}
+												/>
+												<NftMultiPicker
+													config={client.config}
+													username={username}
+													value={stack.picks}
+													onChange={(picks) => updateStack(i, { picks })}
+													label={`NFTs in "${stack.name}"`}
+													lockCollection={lockCollection}
+													filterItem={(it) => canTransferNft(it, username)}
+													max={MAX_ENTRIES}
+													disabled={submitting}
+												/>
+											</>
 										)}
 									</div>
-									<NftMultiPicker
-										config={client.config}
-										username={username}
-										value={stack.picks}
-										onChange={(picks) => updateStack(i, { picks })}
-										label={`NFTs in "${stack.name}"`}
-										lockCollection={lockCollection}
-										filterItem={(it) => canTransferNft(it, username)}
-										max={MAX_ENTRIES}
-										disabled={submitting}
-									/>
-								</div>
-							))}
+								);
+							})}
 							{stacks.length < MAX_STACKS && (
 								<button
 									type="button"
 									className="magi-market-submit ghost"
 									disabled={submitting}
-									onClick={() => setStacks((prev) => [...prev, newStack(prev.length, sellPacks ? '1' : '0')])}
+									onClick={() => {
+										// Collapse whatever is open: the new stack is what you
+										// came here to fill in, and two open pickers push the
+										// controls off-screen.
+										setStacks((prev) => {
+											setOpenStack(prev.length);
+											return [...prev, newStack(prev.length, sellPacks ? '1' : '0')];
+										});
+									}}
 								>
 									Add a stack ({stacks.length}/{MAX_STACKS})
 								</button>
