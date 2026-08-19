@@ -24,14 +24,20 @@ const MAX_ENTRIES = 24;
  * Open a bucket: a fixed-price sale where the CONTRACT picks which NFT the
  * buyer receives.
  *
- * Two shapes are offered rather than the full pool matrix, because those cover
- * what people actually build and the third option is a footgun:
+ * The CONTRACT supports up to 8 pools with any draws-per-pool layout — a
+ * `[5,3,1,1]` pack (commons / uncommons / holo / secret) is perfectly valid.
+ * This form deliberately exposes only the two shapes people actually reach for,
+ * because the general case is a footgun in a form: a bucket whose pools do not
+ * line up with its packDraws lists fine and then refuses EVERY purchase, and
+ * the buyer is the one who discovers it.
  *
  *   Simple  — every NFT in one pool. A draw is weighted by units, so a 1-of-1
  *             among 100 commons really is 1-in-101. This is a gacha machine.
  *   Pack    — the picked NFTs are commons, plus a "rare" set drawn from a
  *             second pool with one guaranteed slot per pack. This is a booster
  *             pack, and the guarantee is the whole point.
+ *
+ * Anything richer is a `listBucket` call away via the SDK.
  *
  * The seller keeps custody either way; the market moves a unit per draw, so
  * this form emits the operator-approval leg alongside the listing.
@@ -189,8 +195,8 @@ export function ListBucketForm({
 							label="What are you selling?"
 							hint={
 								mode === 'simple'
-									? 'One pool. Every unit is equally likely, so more copies of a card make it commoner.'
-									: 'Two pools. Each pack is N commons plus ONE guaranteed rare.'
+									? 'Everything in one group. Every unit is equally likely, so more copies of a card make it commoner.'
+									: 'The classic booster shape: N commons plus ONE guaranteed rare. Buckets support up to 8 tiers with any slot layout (say 5 commons + 3 uncommons + 1 holo + 1 secret) — this form builds the two-tier case; the SDK takes the rest.'
 							}
 						>
 							<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
