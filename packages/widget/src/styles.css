@@ -1861,3 +1861,53 @@
 	text-align: right;
 	color: var(--magi-text);
 }
+
+/* ---- multi-tier bucket builder ---- */
+.magi-market-check {
+	display: flex;
+	gap: 0.55rem;
+	align-items: flex-start;
+	padding: 0.5rem 0;
+	font-size: 0.88rem;
+	line-height: 1.4;
+	color: var(--magi-text-secondary);
+	cursor: pointer;
+}
+.magi-market-check input {
+	margin-top: 0.2rem;
+	accent-color: var(--magi-accent);
+	flex: 0 0 auto;
+}
+.magi-market-check strong {
+	color: var(--magi-text);
+}
+.magi-market-tier {
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+	padding: 0.7rem;
+	margin-bottom: 0.7rem;
+}
+.magi-market-tier-head {
+	display: flex;
+	gap: 0.5rem;
+	align-items: flex-end;
+	margin-bottom: 0.5rem;
+	flex-wrap: wrap;
+}
+/* The tier name grows; the slot count stays small — it is a 1-2 digit field and
+   a full-width input would imply otherwise. */
+.magi-market-tier-head > :first-child {
+	flex: 1 1 8rem;
+	min-width: 0;
+}
+.magi-market-tier-slots {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: 0.8rem;
+	color: var(--magi-text-secondary);
+	white-space: nowrap;
+}
+.magi-market-tier-slots input {
+	width: 4.5rem;
+}
