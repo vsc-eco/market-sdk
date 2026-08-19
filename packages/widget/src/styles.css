@@ -1776,9 +1776,15 @@
 	margin: 0 0 1rem;
 	padding: 0;
 	/* Narrow modals scroll rather than wrap: a step strip that reflows to two
-	   lines reads as two separate controls. */
+	   lines reads as two separate controls.
+
+	   min-width:0 is load-bearing. This is a flex item, so its default
+	   min-width:auto floors it at max-content — and min-width BEATS max-width,
+	   so that floor propagates up and forces the modal card past its 380px cap.
+	   The card then gets wide enough that prose stops wrapping and runs off the
+	   screen. The steps keep their own width via flex-shrink:0 on each item. */
 	overflow-x: auto;
-	min-width: max-content;
+	min-width: 0;
 	scrollbar-width: none;
 }
 .magi-market-wizard-steps::-webkit-scrollbar {
@@ -1843,6 +1849,7 @@
    terms are scanned, not read. */
 .magi-market-review-row {
 	display: flex;
+	min-width: 0;
 	justify-content: space-between;
 	gap: 1rem;
 	padding: 0.35rem 0;
@@ -1860,6 +1867,8 @@
 	margin: 0;
 	text-align: right;
 	color: var(--magi-text);
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 /* ---- multi-stack bucket builder ---- */
@@ -1878,6 +1887,12 @@
 	accent-color: var(--magi-accent);
 	flex: 0 0 auto;
 }
+/* The label text must be allowed to shrink below its content width or it will
+   not wrap — same flex min-width:auto trap as the step strip above. */
+.magi-market-check > span {
+	flex: 1 1 auto;
+	min-width: 0;
+}
 .magi-market-check strong {
 	color: var(--magi-text);
 }
@@ -1893,6 +1908,7 @@
 	align-items: flex-end;
 	margin-bottom: 0.5rem;
 	flex-wrap: wrap;
+	min-width: 0;
 }
 /* The stack name grows; the slot count stays small — it is a 1-2 digit field and
    a full-width input would imply otherwise. */
