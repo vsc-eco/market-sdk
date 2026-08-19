@@ -26,6 +26,7 @@ import { SweepForm } from './actions/SweepForm.js';
 import { BuyBundleForm } from './actions/BuyBundleForm.js';
 import { BundleCard } from './actions/BundleCard.js';
 import { BucketCard } from './actions/BucketCard.js';
+import { ListBucketForm } from './actions/ListBucketForm.js';
 import { ListBundleForm } from './actions/ListBundleForm.js';
 import { AcceptSwapForm } from './actions/AcceptSwapForm.js';
 import { ProposeSwapForm } from './actions/ProposeSwapForm.js';
@@ -205,6 +206,7 @@ type Sheet =
 	| { kind: 'updateListing'; listing: Listing }
 	| { kind: 'sweep' }
 	| { kind: 'listBundle' }
+	| { kind: 'listBucket' }
 	| { kind: 'buyBundle'; bundle: BundleListing }
 	| { kind: 'proposeSwap' }
 	| { kind: 'acceptSwap'; swap: SwapProposal }
@@ -1145,6 +1147,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					{section === 'market' && username && tab === 'bundles' && (
 						<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} />
 					)}
+					{section === 'market' && username && tab === 'buckets' && (
+						<ToolbarAction label="Open a bucket" onClick={() => setSheet({ kind: 'listBucket' })} />
+					)}
 					{section === 'market' && username && tab === 'swaps' && (
 						<ToolbarAction label="Propose swap" onClick={() => setSheet({ kind: 'proposeSwap' })} />
 					)}
@@ -1895,6 +1900,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			)}
 			{sheet?.kind === 'listBundle' && username && (
 				<ListBundleForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'listBucket' && username && (
+				<ListBucketForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
 			)}
 			{sheet?.kind === 'buyBundle' && username && (
 				<BuyBundleForm client={client} username={username} bundle={sheet.bundle} onSuccess={success} onClose={() => setSheet(null)} />
