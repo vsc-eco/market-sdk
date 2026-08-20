@@ -259,8 +259,9 @@ export function ListBucketForm({
 								>
 									<span className="magi-market-option-title">Single draws</span>
 									<span className="magi-market-option-desc">
-										One NFT at a time, drawn from the first stack. Weighted by units, so more
-										copies of a card make it commoner.
+										One NFT at a time, drawn from the first stack. Odds follow how many
+										copies you put in — 10 copies of a card are drawn ten times as often as
+										a 1-of-1.
 									</span>
 								</button>
 								<button
