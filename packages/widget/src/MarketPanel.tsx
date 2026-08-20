@@ -1194,13 +1194,10 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	function buyTile(it: BuyItem) {
 		const mine = isSelf(it.seller);
 		const sym = tokenMeta.symbol(it.paymentToken);
-		const badgeClass = it.kind === 'single' ? '' : ` ${it.kind}`;
-		const badge = <span className={`magi-market-tile-badge${badgeClass}`}>{BUY_KIND_LABEL[it.kind]}</span>;
-		// The badge markup is supplied whole (not just the text) so each format
-		// can carry its own colour; MarketTile renders whatever it is given.
 		const common = {
 			key: it.key,
-			badge,
+			badge: BUY_KIND_LABEL[it.kind],
+			badgeTone: it.kind === 'single' ? undefined : (it.kind as 'bundle' | 'random' | 'mint'),
 			imageUrl: it.tokenId ? nftImages.get(it.nftContract, it.tokenId) : null,
 			tokenId: it.tokenId ?? ''
 		};
