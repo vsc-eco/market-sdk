@@ -35,23 +35,32 @@ export function Modal({
 	children,
 	wide,
 	confirmOnBackdrop = true,
-	confirmMessage = 'Close this window? Anything you entered here will be lost.'
+	// No default here: the two surfaces phrase it differently, so an unset
+	// message must stay unset and let each one supply its own.
+	confirmMessage
 }: ModalProps) {
 	const inPanel = useInPanel();
 
 	// Inside the market panel the form takes the panel over instead of
-	// floating above it — see `PanelSurface`. No backdrop, so nothing to
-	// guard: the only way out is the explicit Back control.
+	// floating above it — see `PanelSurface`. There is no backdrop to
+	// mis-click, so the guard moves to the back control, which PanelView
+	// arms once the user has touched anything.
 	if (inPanel) {
 		return (
-			<PanelView title={title} subtitle={subtitle} onBack={onClose}>
+			<PanelView
+				title={title}
+				subtitle={subtitle}
+				onBack={onClose}
+				confirmOnLeave={confirmOnBackdrop}
+				confirmMessage={confirmMessage}
+			>
 				{children}
 			</PanelView>
 		);
 	}
 
 	const onBackdropClick = () => {
-		if (confirmOnBackdrop && typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+		if (confirmOnBackdrop && typeof window !== 'undefined' && !window.confirm(confirmMessage ?? 'Close this window? Anything you entered here will be lost.')) {
 			return;
 		}
 		onClose();

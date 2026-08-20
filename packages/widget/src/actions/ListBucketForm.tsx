@@ -563,7 +563,12 @@ export function ListBucketForm({
 	);
 
 	return inline ? (
-		<PanelView title="Open a bucket" subtitle={subtitle} onBack={onClose}>
+		<PanelView
+			title="Open a bucket"
+			subtitle={subtitle}
+			onBack={onClose}
+			confirmMessage="The stacks you set up here will be lost."
+		>
 			{body}
 		</PanelView>
 	) : (

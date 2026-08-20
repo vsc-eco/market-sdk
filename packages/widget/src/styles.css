@@ -2208,3 +2208,19 @@
 .magi-market-approved .magi-market-field-hint {
 	margin: 0;
 }
+
+/* The leave-confirmation over a panel view. Narrow on purpose: it asks one
+   question, so it should not look like another form. */
+.magi-market-confirm {
+	max-width: 24rem;
+	margin-top: 12vh;
+}
+.magi-market-confirm-actions {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 1rem;
+}
+.magi-market-confirm-actions .magi-market-submit {
+	flex: 1 1 0;
+	width: auto;
+}
