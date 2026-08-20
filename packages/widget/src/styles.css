@@ -2559,3 +2559,78 @@
 	border: 1px dashed var(--magi-field-border);
 	border-radius: 8px;
 }
+
+/* ---- explore filters ------------------------------------------------- */
+.magi-market-xfilters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.9rem;
+	align-items: flex-end;
+	padding: 0.75rem 0.9rem;
+	margin-bottom: 0.8rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+}
+.magi-market-xfilter-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+.magi-market-xfilter-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.magi-market-xfilter-reset { width: auto; padding: 0.3rem 0.9rem; margin-left: auto; }
+
+/* ---- explore hover preview ------------------------------------------- */
+.magi-market-preview-host {
+	position: relative;
+}
+.magi-market-preview {
+	position: absolute;
+	left: 50%;
+	bottom: calc(100% - 2.2rem);
+	transform: translate(-50%, 6px);
+	width: 216px;
+	max-width: 70vw;
+	padding: 0.3rem;
+	border: 1px solid var(--magi-accent);
+	border-radius: 12px;
+	background: var(--magi-modal-bg, #171a24);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.14s ease, transform 0.14s ease;
+	/* The preview must never swallow the click that opens the details. */
+	pointer-events: none;
+	z-index: 6;
+}
+.magi-market-preview img {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	object-fit: contain;
+	border-radius: 8px;
+	background: var(--magi-field-bg, #0f121a);
+	display: block;
+}
+.magi-market-preview-cap {
+	display: block;
+	padding: 0.3rem 0.2rem 0.1rem;
+	font-size: 0.72rem;
+	color: var(--magi-text-secondary);
+	text-align: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-preview-host:hover .magi-market-preview,
+.magi-market-preview-host:focus-within .magi-market-preview {
+	opacity: 1;
+	visibility: visible;
+	transform: translate(-50%, 0);
+}
+/* Touch has no hover: the preview would either never show or stick after a
+   tap, and tapping already opens the full details. */
+@media (hover: none) {
+	.magi-market-preview { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-preview { transition: none; }
+}

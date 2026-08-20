@@ -47,6 +47,11 @@ import { looksTruncated } from '@vsc.eco/market-sdk';
 import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
 import { ActivityFeed } from './components/ActivityFeed.js';
+import {
+	ExploreFilterBar,
+	DEFAULT_EXPLORE_FILTERS,
+	type ExploreFilterState
+} from './components/ExploreFilterBar.js';
 import { Spinner } from './components/Spinner.js';
 import { PanelSurface } from './components/PanelSurface.js';
 import { PanelView } from './components/PanelView.js';
@@ -479,10 +484,39 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 
 	// Search spans token id, any holder, collection name/id and template id,
 	// so "alicante", "tibfox" and a collection name all find something.
+	const [exploreFilters, setExploreFilters] = useState<ExploreFilterState>(DEFAULT_EXPLORE_FILTERS);
+
+	/** `contract:tokenId` of everything currently listed, for the availability filter. */
+	const listedKeys = useMemo(
+		() => new Set(listings.filter((l) => l.active).map((l) => `${l.nftContract}:${l.tokenId}`)),
+		[listings]
+	);
+
 	const exploreFiltered = useMemo(() => {
 		const q = exploreQuery.trim().toLowerCase();
-		if (!q) return exploreScoped;
-		return exploreScoped.filter((t) => {
+		const f = exploreFilters;
+		const narrowed = exploreScoped.filter((t) => {
+			if (f.listed !== 'any') {
+				const isListed = listedKeys.has(`${t.nftContract}:${t.tokenId}`);
+				if (f.listed === 'listed' && !isListed) return false;
+				if (f.listed === 'unlisted' && isListed) return false;
+			}
+			if (f.holding === 'mine' && t.myUnits <= 0n) return false;
+			if (f.holding === 'others' && !t.holders.some((a) => !isSelf(a))) return false;
+			if (f.soulbound === 'only' && !t.soulbound) return false;
+			if (f.soulbound === 'hide' && t.soulbound) return false;
+			return true;
+		});
+		const sorted =
+			f.sort === 'id'
+				? narrowed
+				: [...narrowed].sort((a, b) =>
+						f.sort === 'holders'
+							? b.holders.length - a.holders.length
+							: Number(b.totalUnits - a.totalUnits)
+					);
+		if (!q) return sorted;
+		return sorted.filter((t) => {
 			const tpl = templates.templateOf(t.nftContract, t.tokenId);
 			return (
 				t.tokenId.toLowerCase().includes(q) ||
@@ -492,7 +526,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				(tpl ? tpl.toLowerCase().includes(q) : false)
 			);
 		});
-	}, [exploreScoped, exploreQuery, templates, collMeta]);
+	}, [exploreScoped, exploreQuery, templates, collMeta, exploreFilters, listedKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Paged, not capped — everything is reachable via "Load more".
 	//
@@ -610,6 +644,13 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		setLoading(true);
 		setErr(null);
 		try {
+			if (section === 'explore') {
+				// Explore's own data comes from the holdings hooks; the only
+				// thing load() owes it is which tokens are for sale, for the
+				// availability filter.
+				setListings(await client.provider.getListings({ activeOnly: true }));
+				return;
+			}
 			if (section === 'activity') {
 				setActivity(
 					await client.provider.getActivity(
@@ -732,10 +773,16 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			const rest = t.holders.length - 1;
 			return rest > 0 ? `${lead}\u00A0+${rest}` : lead;
 		})();
+		const img = nftImages.get(t.nftContract, t.tokenId);
+		const tpl = templates.templateOf(t.nftContract, t.tokenId);
 		return (
+			// Hover (or keyboard-focus) enlarges the art in place. Explore is a
+			// wall of ~110px thumbnails you are browsing rather than shopping,
+			// and opening the details panel to answer "what IS that" costs the
+			// scroll position you were reading from.
+			<div className="magi-market-preview-host" key={`${t.nftContract}:${t.tokenId}`}>
 			<MarketTile
-				key={`${t.nftContract}:${t.tokenId}`}
-				imageUrl={nftImages.get(t.nftContract, t.tokenId)}
+				imageUrl={img}
 				tokenId={t.tokenId}
 				subtitle={
 					<>
@@ -782,6 +829,16 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					)
 				}
 			/>
+			{img && (
+				<div className="magi-market-preview" aria-hidden="true">
+					<img src={img} alt="" loading="lazy" />
+					<span className="magi-market-preview-cap">
+						#{t.tokenId}
+						{tpl ? ` · ${tpl}` : ''}
+					</span>
+				</div>
+			)}
+			</div>
 		);
 	};
 
@@ -1455,6 +1512,30 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				/>
 			)}
 
+			{/* Top-level section switch. Rendered OUTSIDE every section gate:
+			    it used to live inside the market/explore branch, so opening
+			    Activity removed the only control that could leave it. */}
+			{!view && !sheet && (
+					<div className="magi-market-sections" role="tablist" aria-label="Panel section">
+						{([
+							{ id: 'market' as Section, label: 'Market' },
+							{ id: 'explore' as Section, label: 'Explore' },
+							{ id: 'activity' as Section, label: 'Activity' }
+						]).map((s) => (
+							<button
+								key={s.id}
+								type="button"
+								role="tab"
+								aria-selected={section === s.id}
+								className={`magi-market-section${section === s.id ? ' active' : ''}`}
+								onClick={() => setSection(s.id)}
+							>
+								{s.label}
+							</button>
+						))}
+					</div>
+			)}
+
 			{!view && !sheet && section === 'activity' && (
 				<>
 					<p className="magi-market-subtitle" style={{ marginBottom: '0.7rem' }}>
@@ -1481,25 +1562,6 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				<>
 				{/* Top-level section switch, one level ABOVE the market tabs and at
 				    the same level as the header — Explore isn't an order-book view,
-				    so it doesn't belong among Listings/Auctions/…. */}
-				<div className="magi-market-sections" role="tablist" aria-label="Panel section">
-					{([
-						{ id: 'market' as Section, label: 'Market' },
-						{ id: 'explore' as Section, label: 'Explore' },
-						{ id: 'activity' as Section, label: 'Activity' }
-					]).map((s) => (
-						<button
-							key={s.id}
-							type="button"
-							role="tab"
-							aria-selected={section === s.id}
-							className={`magi-market-section${section === s.id ? ' active' : ''}`}
-							onClick={() => setSection(s.id)}
-						>
-							{s.label}
-						</button>
-					))}
-				</div>
 
 				{section === 'market' && (
 					<div className="magi-market-tabs" ref={tabsRef} role="tablist" aria-label="Market views">
@@ -1645,6 +1707,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						</div>
 					</div>
 				</div>
+
+				{section === 'explore' && filtersOpen && (
+					<ExploreFilterBar
+						value={exploreFilters}
+						onChange={setExploreFilters}
+						onReset={() => setExploreFilters(DEFAULT_EXPLORE_FILTERS)}
+					/>
+				)}
 
 				{section === 'market' && filtersOpen && (
 					<FilterBar
