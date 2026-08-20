@@ -210,33 +210,7 @@ export function ListBucketForm({
 		}
 	}
 
-	/**
-	 * One body, two containers. Inline is the default the panel uses; the modal
-	 * remains for callers that must not lose their place behind it.
-	 */
-	const Shell = ({
-		title,
-		subtitle,
-		children
-	}: {
-		title: string;
-		subtitle?: string;
-		children: React.ReactNode;
-	}) =>
-		inline ? (
-			<PanelView title={title} subtitle={subtitle} onBack={onClose}>
-				{children}
-			</PanelView>
-		) : (
-			<Modal wide title={title} subtitle={subtitle} onClose={onClose}>
-				{children}
-			</Modal>
-		);
-
-	return (
-		<Shell
-			title="Open a bucket"
-			subtitle={
+	const subtitle =
 				txId
 					? undefined
 					: [
@@ -245,8 +219,19 @@ export function ListBucketForm({
 							'What a draw costs, and how long it runs.',
 							'Check it over, then open.'
 						][step]
-			}
-		>
+			;
+
+	/**
+	 * The body is a VALUE, and the container is chosen around it.
+	 *
+	 * It was briefly a `Shell` component declared inside this one, which is a
+	 * new component type on every render — React then unmounts and remounts the
+	 * whole subtree each time, so the NFT picker refetched on a loop and never
+	 * settled. Declaring components during render is the bug; building elements
+	 * is not.
+	 */
+	const body = (
+		<>
 			{txId ? (
 				<>
 					<BroadcastResult txId={txId} />
@@ -553,6 +538,16 @@ export function ListBucketForm({
 					</div>
 				</>
 			)}
-		</Shell>
+		</>
+	);
+
+	return inline ? (
+		<PanelView title="Open a bucket" subtitle={subtitle} onBack={onClose}>
+			{body}
+		</PanelView>
+	) : (
+		<Modal wide title="Open a bucket" subtitle={subtitle} onClose={onClose}>
+			{body}
+		</Modal>
 	);
 }

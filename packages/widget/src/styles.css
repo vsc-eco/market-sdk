@@ -1953,10 +1953,20 @@
 .magi-market-stack-head {
 	display: flex;
 	gap: 0.5rem;
-	align-items: flex-end;
-	margin-bottom: 0.5rem;
+	align-items: center;
+	margin-bottom: 0.6rem;
 	flex-wrap: wrap;
 	min-width: 0;
+}
+/* Open: the toggle is just a caret, so it must NOT flex — otherwise it expands
+   and shoves the name input to the far edge with a lake of space between. */
+.magi-market-stack.open .magi-market-stack-toggle {
+	flex: 0 0 auto;
+}
+.magi-market-stack.open .magi-market-stack-head > input {
+	flex: 1 1 12rem;
+	min-width: 0;
+	max-width: 20rem;
 }
 /* The stack name grows; the slot count stays small — it is a 1-2 digit field and
    a full-width input would imply otherwise. */
@@ -1981,7 +1991,9 @@
 /* The card is 520px on desktop so the picker can show three NFTs per row. That
    width is for the GRID — a text input stretched to 485px is just a bigger text
    input, and a line of prose that long is harder to read, not easier. */
-.magi-market-bucketform .magi-market-field,
+/* Cap PROSE and text inputs, never a container that holds the picker: capping
+   `.magi-market-field` squeezed the NFT grid into ~600px of a full-width box and
+   left a dead margin beside it. */
 .magi-market-bucketform .magi-market-check,
 .magi-market-bucketform .magi-market-field-hint {
 	max-width: 34rem;
@@ -2061,7 +2073,6 @@
 }
 /* Prose and single-line inputs keep a readable measure even though the view is
    wide. Width is for the grid; a 690px-wide text input is not an improvement. */
-.magi-market-view .magi-market-bucketform .magi-market-field,
 .magi-market-view .magi-market-bucketform .magi-market-check,
 .magi-market-view .magi-market-bucketform .magi-market-field-hint {
 	max-width: 38rem;
