@@ -160,6 +160,11 @@ export function ListBucketForm({
 				if (short)
 					return `"${short.name}" promises ${slots(short)} per pack but only has ${units(short)} unit${units(short) === 1 ? '' : 's'}.`;
 			}
+			// A single draw always comes from stack 0. Without packs, the rest
+			// would be escrowed and undrawable — so this blocks rather than
+			// warns, and the step offers a one-click merge.
+			if (!sellPacks && stacks.length > 1)
+				return `Single draws only come from "${stacks[0].name}". Merge your stacks into one, or sell packs too.`;
 			// Single draws always come from the first stack, so it must have stock.
 			if (sellSingles && units(stacks[0]) === 0)
 				return `Single draws come from "${stacks[0].name}", which is empty.`;
@@ -362,7 +367,48 @@ export function ListBucketForm({
 									</div>
 								);
 							})}
-							{stacks.length < MAX_STACKS && (
+							{/* Stacks only mean something for packs: a single draw always
+							    comes from stack 0, so a singles-only sale with several
+							    stacks escrows NFTs nobody can ever pull. Rather than
+							    warn about it afterwards, the control is not offered. */}
+							{!sellPacks && stacks.length > 1 && (
+								<div className="magi-market-status warn">
+									<p style={{ margin: '0 0 0.5rem' }}>
+										Single draws only ever come from “{stacks[0].name}”. The other{' '}
+										{stacks.length === 2 ? 'stack' : `${stacks.length - 1} stacks`} would be
+										escrowed and undrawable.
+									</p>
+									<button
+										type="button"
+										className="magi-market-submit ghost"
+										style={{ width: 'auto' }}
+										disabled={submitting}
+										onClick={() =>
+											// Merge rather than discard: the picks are the work,
+											// the grouping is not.
+											setStacks((prev) => {
+												// Sum by token rather than concatenating: the same
+												// NFT can sit in two stacks, and two entries for one
+												// token in one stack would list it twice.
+												const byToken = new Map<string, NftMultiPick>();
+												for (const t of prev) {
+													for (const pick of t.picks) {
+														const k = `${pick.nftContract}:${pick.tokenId}`;
+														const at = byToken.get(k);
+														if (at) at.amount += pick.amount;
+														else byToken.set(k, { ...pick });
+													}
+												}
+												setOpenStack(0);
+												return [{ ...prev[0], picks: Array.from(byToken.values()) }];
+											})
+										}
+									>
+										Merge into one stack
+									</button>
+								</div>
+							)}
+							{sellPacks && stacks.length < MAX_STACKS && (
 								<button
 									type="button"
 									className="magi-market-submit ghost"
@@ -383,7 +429,7 @@ export function ListBucketForm({
 							<p className="magi-market-field-hint">
 								{sellPacks
 									? 'A stack with 0 per pack is still in the bucket — it just is not guaranteed a slot.'
-									: 'Single draws come from the first stack. Add stacks if you also sell packs.'}
+									: 'One pile: every draw picks from everything you put here. Stacks — commons, rares, a guaranteed slot — are what packs are for, so turn packs on if you want them.'}
 							</p>
 						</>
 					)}
@@ -396,18 +442,6 @@ export function ListBucketForm({
 								onChange={setPaymentToken}
 								disabled={submitting}
 							/>
-							{/* A single draw always comes from stack 0 — the contract
-							    only spreads across stacks for a PACK, via packDraws.
-							    So singles-only plus several stacks means everything
-							    past the first is stocked but unreachable. */}
-							{sellSingles && !sellPacks && stacks.length > 1 && (
-								<p className="magi-market-status warn">
-									Single draws only ever come from your first stack
-									{stacks[0]?.name ? ` (${stacks[0].name})` : ''}. The other
-									{stacks.length === 2 ? ' stack' : ` ${stacks.length - 1} stacks`} would sit
-									there undrawable — turn on packs, or move everything into one stack.
-								</p>
-							)}
 							{sellSingles && (
 								<Field label="Price per draw">
 									<TextInput
