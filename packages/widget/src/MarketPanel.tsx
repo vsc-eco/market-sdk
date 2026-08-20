@@ -45,6 +45,7 @@ import { NftDetails } from './components/NftDetails.js';
 import { Spinner } from './components/Spinner.js';
 import { PanelSurface } from './components/PanelSurface.js';
 import { PanelView } from './components/PanelView.js';
+import { Modal } from './components/Modal.js';
 import { MarketTile } from './components/MarketTile.js';
 import {
 	useChainClock,
@@ -245,6 +246,9 @@ type Sheet =
 	// The rich card for a bundle/bucket is now a detail VIEW rather than a
 	// row in the list: the merged tab renders every format as a uniform tile,
 	// and the contents-and-odds detail opens on top of it.
+	// Narrow panels get one "Create" entry point instead of five toolbar
+	// buttons; this is the chooser behind it.
+	| { kind: 'create' }
 	| { kind: 'bundleDetail'; bundle: BundleListing }
 	| { kind: 'bucketDetail'; bucket: BucketListing }
 	| { kind: 'proposeSwap' }
@@ -1451,6 +1455,29 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			{sheet?.kind === 'listBundle' && username && (
 				<ListBundleForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
 			)}
+			{sheet?.kind === 'create' && username && (
+				<Modal
+					title="Sell or sweep"
+					subtitle="Every way to put something on the market, or take several off it."
+					onClose={() => setSheet(null)}
+					confirmOnBackdrop={false}
+				>
+					<div className="magi-market-createlist">
+						{[
+							{ label: 'Sell an NFT', hint: 'One NFT at a fixed price.', go: () => setSheet({ kind: 'sell' as const }) },
+							{ label: 'Create bundle', hint: 'Several NFTs as one all-or-nothing lot.', go: () => setSheet({ kind: 'listBundle' as const }) },
+							{ label: 'Open a bucket', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
+							{ label: 'Sell mint spots', hint: 'The right to mint a fresh edition.', go: () => setSheet({ kind: 'mintspots' as const }) },
+							{ label: 'Sweep', hint: 'Buy the cheapest listings of one collection at once.', go: () => setSheet({ kind: 'sweep' as const }) }
+						].map((o) => (
+							<button key={o.label} type="button" className="magi-market-createrow" onClick={o.go}>
+								<span className="magi-market-createrow-label">{o.label}</span>
+								<span className="magi-market-createrow-hint">{o.hint}</span>
+							</button>
+						))}
+					</div>
+				</Modal>
+			)}
 			{sheet?.kind === 'bundleDetail' && (
 				<PanelView
 					title={`Bundle #${sheet.bundle.bundleId}`}
@@ -1590,13 +1617,21 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				<div className="magi-market-subtabs-row">
 					<div className="magi-market-subtabs-action magi-market-subtabs-action--left">
 						{section === 'market' && username && tab === 'buy' && (
-							<>
-								<ToolbarAction label="Sell an NFT" onClick={() => setSheet({ kind: 'sell' })} />
-								<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} style={{ marginLeft: '0.5rem' }} />
-								<ToolbarAction label="Open a bucket" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
-								<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} style={{ marginLeft: '0.5rem' }} />
-								<ToolbarAction label="Sweep" onClick={() => setSheet({ kind: 'sweep' })} style={{ marginLeft: '0.5rem' }} />
-							</>
+							// Five ways to sell is three wrapped rows on a phone,
+							// pushing the goods below the fold. Narrow panels get
+							// one button and a chooser that has room to say what
+							// each option actually does.
+							isNarrow ? (
+								<ToolbarAction label="Sell or sweep" onClick={() => setSheet({ kind: 'create' })} />
+							) : (
+								<>
+									<ToolbarAction label="Sell an NFT" onClick={() => setSheet({ kind: 'sell' })} />
+									<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} style={{ marginLeft: '0.5rem' }} />
+									<ToolbarAction label="Open a bucket" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
+									<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} style={{ marginLeft: '0.5rem' }} />
+									<ToolbarAction label="Sweep" onClick={() => setSheet({ kind: 'sweep' })} style={{ marginLeft: '0.5rem' }} />
+								</>
+							)
 						)}
 						{section === 'market' && username && tab === 'offers' && (
 							<ToolbarAction label="Make an offer" onClick={() => setSheet({ kind: 'offer' })} />

@@ -2281,20 +2281,71 @@
 	font-size: 0.72rem;
 }
 
-/* Keep a tile's action row on ONE line. The buy-now grid mixes formats with
-   different button labels, and a row that wraps for some tiles and not others
-   makes a grid of uneven cards out of what is meant to be a scannable wall. */
-.magi-market-tile-actions {
-	flex-wrap: nowrap;
-}
+/* A tile's action row shares one line when there is room and breaks when
+   there isn't. Forcing it to stay on one line squeezed the buttons on the
+   auction/offer tiles, where a meta line ("High: hive:...") sits beside them:
+   a button crushed to a sliver is worse than a button on its own line. The
+   floor below is what makes it break rather than shrink. */
 .magi-market-tile-actions .magi-market-submit {
-	flex: 1 1 0;
-	min-width: 0;
+	flex: 1 1 auto;
+	min-width: 4.25rem;
 	padding-left: 0.4rem;
 	padding-right: 0.4rem;
 	white-space: nowrap;
+}
+/* The meta line takes what it can get and gives the row up rather than
+   starving the button next to it. */
+.magi-market-tile-bidder {
+	flex: 1 1 7rem;
+	max-width: 100%;
 }
 .magi-market-tile-per {
 	opacity: 0.65;
 	font-size: 0.86em;
 }
+
+/* The create chooser behind the single narrow-panel toolbar button. Rows
+   rather than a row of chips: on a phone there is width for a label AND a
+   line saying what it does, which the five toolbar buttons never had. */
+.magi-market-createlist {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+.magi-market-createrow {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	width: 100%;
+	padding: 0.6rem 0.8rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--magi-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.magi-market-createrow:hover {
+	background: var(--magi-accent-light);
+	border-color: var(--magi-accent);
+}
+.magi-market-createrow-label { font-size: 0.92rem; font-weight: 600; }
+.magi-market-createrow-hint { font-size: 0.78rem; color: var(--magi-text-secondary); }
+
+/* Chips scroll sideways on a narrow panel instead of wrapping to three rows.
+   NOT `min-width: max-content` on this element, tempting as it looks: that
+   makes the track itself as wide as its content, which pushes the demand up
+   the tree and gives the whole PAGE a horizontal scrollbar. The track stays
+   auto-width and the chips refuse to shrink — that is what overflows. */
+.magi-market.is-narrow .magi-market-kindchips {
+	flex-wrap: nowrap;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.magi-market.is-narrow .magi-market-kindchips::-webkit-scrollbar { display: none; }
+.magi-market.is-narrow .magi-market-kindchip { flex: 0 0 auto; }
