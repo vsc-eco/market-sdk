@@ -249,31 +249,35 @@ export function ListBucketForm({
 							label="How can people buy?"
 							hint="Both can run at once — the same stock, sold two ways."
 						>
-							<label className="magi-market-check">
-								<input
-									type="checkbox"
-									checked={sellSingles}
+							<div className="magi-market-options">
+								<button
+									type="button"
+									className={`magi-market-option${sellSingles ? ' selected' : ''}`}
+									aria-pressed={sellSingles}
 									disabled={submitting}
-									onChange={(e) => setSellSingles(e.currentTarget.checked)}
-								/>
-								<span>
-									<strong>Single draws</strong> — one NFT at a time, drawn from the first stack.
-									Weighted by units, so more copies of a card make it commoner.
-								</span>
-							</label>
-							<label className="magi-market-check">
-								<input
-									type="checkbox"
-									checked={sellPacks}
+									onClick={() => setSellSingles(!sellSingles)}
+								>
+									<span className="magi-market-option-title">Single draws</span>
+									<span className="magi-market-option-desc">
+										One NFT at a time, drawn from the first stack. Weighted by units, so more
+										copies of a card make it commoner.
+									</span>
+								</button>
+								<button
+									type="button"
+									className={`magi-market-option${sellPacks ? ' selected' : ''}`}
+									aria-pressed={sellPacks}
 									disabled={submitting}
-									onChange={(e) => setSellPacks(e.currentTarget.checked)}
-								/>
-								<span>
-									<strong>Packs</strong> — several NFTs at once with a fixed shape. Each slot draws
-									from a chosen stack, which is how "every pack has a rare" becomes a promise rather
-									than a hope.
-								</span>
-							</label>
+									onClick={() => setSellPacks(!sellPacks)}
+								>
+									<span className="magi-market-option-title">Packs</span>
+									<span className="magi-market-option-desc">
+										Several NFTs at once with a fixed shape. Each slot draws from a chosen
+										stack, which is how "every pack has a rare" becomes a promise rather than a
+										hope.
+									</span>
+								</button>
+							</div>
 						</Field>
 					)}
 

@@ -2028,6 +2028,9 @@
 	gap: 0.7rem;
 }
 .magi-market-view-head {
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
 	display: flex;
 	align-items: flex-start;
 	gap: 0.75rem;
@@ -2092,10 +2095,85 @@
 	min-width: 8rem;
 	padding: 0.5rem 1.2rem;
 }
+/* Back at the left edge, the forward action at the right — the conventional
+   wizard reading order, and it stops a lone "Next" sitting oddly under the
+   left margin. */
+.magi-market-view .magi-market-wizard-nav {
+	justify-content: flex-end;
+}
+.magi-market-view .magi-market-wizard-nav .magi-market-submit.ghost:first-child {
+	margin-right: auto;
+}
 /* A stack is a section of the page now, not a boxed row in a cramped dialog. */
 .magi-market-view .magi-market-stack {
 	padding: 0.9rem;
 }
 .magi-market-view .magi-market-stack.open {
 	background: rgba(255, 255, 255, 0.02);
+}
+
+/* ---- selectable option cards (replacing checkbox rows) ---- */
+/* Two side-by-side on desktop, stacked when there is no room. Buttons rather
+   than checkboxes because each option carries a sentence of explanation — a
+   14px tickbox is a small target for a choice that needs three lines to
+   describe, and the whole card being pressable matches how it reads. */
+.magi-market-options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	gap: 0.6rem;
+}
+.magi-market-option {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	min-width: 0;
+	padding: 0.85rem 0.95rem;
+	text-align: left;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+.magi-market-option:hover:not(:disabled) {
+	border-color: var(--magi-accent);
+}
+.magi-market-option.selected {
+	border-color: var(--magi-accent);
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-option:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+.magi-market-option-title {
+	font-weight: 600;
+	color: var(--magi-text);
+}
+/* A tick, drawn in the corner rather than as a separate control, so the
+   selected state is unmistakable without reintroducing a checkbox. */
+.magi-market-option.selected .magi-market-option-title::after {
+	content: ' ✓';
+	color: var(--magi-accent);
+}
+.magi-market-option-desc {
+	font-size: 0.82rem;
+	line-height: 1.4;
+}
+
+/* ---- centre the view's working column ---- */
+/* The panel is wider than a form wants to be. Everything except the header
+   sits in a centred column so the content is not stranded against the left
+   edge with a third of the panel empty beside it. The grid still gets the full
+   column, which is what the width was for. */
+.magi-market-view-body {
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
 }

@@ -9,6 +9,9 @@ import type { ReactNode } from 'react';
  * the buttons get pushed out of reach on short screens. Nothing about creating
  * a listing needs to float above the panel — it IS the task, so it takes the
  * panel over and hands it back when done.
+ *
+ * The body sits in a centred column: a panel is wider than a form wants to be,
+ * and left-aligning everything leaves a third of it empty.
  */
 export interface PanelViewProps {
 	title: string;
@@ -31,7 +34,7 @@ export function PanelView({ title, subtitle, backLabel = 'Back', onBack, childre
 					{subtitle && <p className="magi-market-view-subtitle">{subtitle}</p>}
 				</div>
 			</div>
-			{children}
+			<div className="magi-market-view-body">{children}</div>
 		</div>
 	);
 }
