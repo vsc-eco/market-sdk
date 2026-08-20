@@ -194,6 +194,23 @@ export function NftMultiPicker({
 		[items, filterItem]
 	);
 
+	/**
+	 * Depend on the CONTENT of `eligible`, not its identity.
+	 *
+	 * Callers pass `filterItem` as an inline arrow — idiomatic React, and it has
+	 * a new identity on every render. That makes `eligible` a new array every
+	 * render too, so an effect keyed on it re-ran forever: resolve images →
+	 * setImages → re-render → new arrow → new array → resolve again. The symptom
+	 * was an NFT picker that never stopped loading.
+	 *
+	 * Keying on the joined item keys makes the dependency stable by VALUE, so
+	 * the effect runs when the set of NFTs actually changes and not before.
+	 * Fixed here rather than asking every caller to remember useCallback,
+	 * because a component that melts when handed a plain arrow is the thing
+	 * that is wrong.
+	 */
+	const eligibleKey = useMemo(() => eligible.map(key).join('|'), [eligible]);
+
 	useEffect(() => {
 		if (!eligible.length) return;
 		let cancelled = false;
@@ -206,7 +223,8 @@ export function NftMultiPicker({
 			});
 		}).catch(() => {});
 		return () => { cancelled = true; };
-	}, [nft, eligible]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by value, see above
+	}, [nft, eligibleKey]);
 
 	const pickedKeys = useMemo(() => new Set(value.map((v) => `${v.nftContract}:${v.tokenId}`)), [value]);
 	// The collection currently locked-in is either explicit (caller prop)
