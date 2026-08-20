@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BucketEntry, BucketListing, BucketPool, MarketClient } from '@vsc.eco/market-sdk';
+import type { BucketEntry, BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
 import {
 	createNftClient,
 	MAINNET_CONFIG as TOKEN_MAINNET,
@@ -96,7 +96,7 @@ function EntryTile({
  *
  * Stacks are surfaced explicitly rather than folded into one number because a
  * ("stack" is the user-facing name for what the contract's wire format calls a
- * pool — `entries[].pool`, `packDraws[i]` — kept distinct from liquidity pools.)
+ * stack — `entries[].stack`, `packDraws[i]` — kept distinct from liquidity stacks.)
  * bucket with guaranteed slots drains UNEVENLY — the guaranteed stack empties
  * first and strands the rest — so "units left" alone can suggest a pack is
  * available when it cannot actually be filled.
@@ -121,7 +121,7 @@ export function BucketCard({
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);
 
 	const [entries, setEntries] = useState<BucketEntry[] | null>(null);
-	const [pools, setPools] = useState<BucketPool[]>([]);
+	const [stacks, setStacks] = useState<BucketStack[]>([]);
 	const [images, setImages] = useState<Map<string, string | null>>(new Map());
 
 	useEffect(() => {
@@ -137,8 +137,8 @@ export function BucketCard({
 			if (cancelled) return;
 			setEntries(rows); // commit before image resolution, which must not undo it
 			try {
-				const p = await client.provider.getBucketPools(bucket.bucketId);
-				if (!cancelled) setPools(p);
+				const p = await client.provider.getBucketStacks(bucket.bucketId);
+				if (!cancelled) setStacks(p);
 			} catch {
 				/* odds fall back to per-bucket */
 			}
@@ -157,15 +157,15 @@ export function BucketCard({
 		};
 	}, [client, nft, bucket]);
 
-	const poolUnits = useMemo(() => {
+	const stackUnits = useMemo(() => {
 		const m = new Map<number, number>();
-		for (const p of pools) m.set(p.pool, p.unitsLeft);
+		for (const p of stacks) m.set(p.stack, p.unitsLeft);
 		return m;
-	}, [pools]);
+	}, [stacks]);
 
 	/** Chance of drawing this entry, given a draw from its own stack. */
 	const chanceOf = (e: BucketEntry): number | null => {
-		const total = poolUnits.get(e.pool);
+		const total = stackUnits.get(e.stack);
 		if (!total) return null;
 		return (e.amountLeft / total) * 100;
 	};
@@ -176,8 +176,8 @@ export function BucketCard({
 	/** A pack needs every promised slot filled, so check stacks not the total. */
 	const packFillable = useMemo(() => {
 		if (!packsOn || bucket.packDraws.length === 0) return false;
-		return bucket.packDraws.every((need: number, pool: number) => need === 0 || (poolUnits.get(pool) ?? 0) >= need);
-	}, [packsOn, bucket.packDraws, poolUnits]);
+		return bucket.packDraws.every((need: number, stack: number) => need === 0 || (stackUnits.get(stack) ?? 0) >= need);
+	}, [packsOn, bucket.packDraws, stackUnits]);
 
 	const sym = tokenMeta.symbol(bucket.paymentToken);
 	const action = (
@@ -243,14 +243,14 @@ export function BucketCard({
 				{bucket.packDraws.length > 1 && (
 					<> · pack: {bucket.packDraws.map((n: number, i: number) => `${n} from stack ${i + 1}`).join(' + ')}</>
 				)}
-				{pools.length > 1 && (
+				{stacks.length > 1 && (
 					<>
 						{' '}
 						·{' '}
-						{pools
+						{stacks
 							.slice()
-							.sort((a, b) => a.pool - b.pool)
-							.map((p) => `stack ${p.pool + 1}: ${p.unitsLeft}`)
+							.sort((a, b) => a.stack - b.stack)
+							.map((p) => `stack ${p.stack + 1}: ${p.unitsLeft}`)
 							.join(', ')}
 					</>
 				)}
@@ -265,10 +265,10 @@ export function BucketCard({
 			) : (
 				entries
 					.slice()
-					.sort((a, b) => a.pool - b.pool || b.amountLeft - a.amountLeft)
+					.sort((a, b) => a.stack - b.stack || b.amountLeft - a.amountLeft)
 					.map((e) => (
 						<EntryTile
-							key={`${e.pool}:${e.tokenId}`}
+							key={`${e.stack}:${e.tokenId}`}
 							imageUrl={images.get(`${bucket.nftContract}:${e.tokenId}`) ?? null}
 							entry={e}
 							chance={chanceOf(e)}

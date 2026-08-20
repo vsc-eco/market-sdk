@@ -116,7 +116,7 @@ export type {
 	BundleListing,
 	BucketListing,
 	BucketEntry,
-	BucketPool,
+	BucketStack,
 	SwapProposal,
 	RentalListing,
 	MintSpotListing,

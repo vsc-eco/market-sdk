@@ -177,7 +177,7 @@ export interface Listing extends Indexed {
 	payoutMode?: '' | 'default' | 'unmap';
 	payoutL1Address?: string;
 	/** F2 DEX-routed settlement opt-in. */
-	dexPool?: string;
+	dexStack?: string;
 	settleToken?: string;
 	minSettleOut?: string;
 }
@@ -233,7 +233,7 @@ export interface BucketListing {
 	pricePerDraw: string;
 	/** "0" when pack sales are disabled. */
 	pricePerPack: string;
-	/** Draws per pool, e.g. [4,1] = 4 commons + 1 guaranteed rare. */
+	/** Draws per stack, e.g. [4,1] = 4 commons + 1 guaranteed rare. */
 	packDraws: number[];
 	/** Cards in one pack — the sum of packDraws. 0 when packs are off. */
 	packSize: number;
@@ -257,7 +257,7 @@ export interface BucketListing {
 export interface BucketEntry {
 	bucketId: number;
 	tokenId: string;
-	pool: number;
+	stack: number;
 	amountStocked: number;
 	amountDrawn: number;
 	amountDropped: number;
@@ -265,15 +265,15 @@ export interface BucketEntry {
 }
 
 /**
- * Units remaining in one pool.
+ * Units remaining in one stack.
  *
  * Worth reading before offering a pack: a bucket with guaranteed slots drains
- * UNEVENLY — the guaranteed pool empties first and strands the rest — so the
+ * UNEVENLY — the guaranteed stack empties first and strands the rest — so the
  * grand total can look healthy while the next pack cannot actually be filled.
  */
-export interface BucketPool {
+export interface BucketStack {
 	bucketId: number;
-	pool: number;
+	stack: number;
 	unitsStocked: number;
 	unitsLeft: number;
 	distinctTokens: number;

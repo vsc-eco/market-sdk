@@ -37,9 +37,9 @@ const MAX_STACKS = 8;
 /**
  * A stack of NFTs that a pack slot can draw from.
  *
- * On the wire the contract calls this a "pool" and identifies it by index —
- * `entries[].pool`, `packDraws[i]`. "Stack" is the name everywhere a person can
- * see, because "pool" reads as a liquidity pool in a product that also has
+ * On the wire the contract calls this a "stack" and identifies it by index —
+ * `entries[].stack`, `packDraws[i]`. "Stack" is the name everywhere a person can
+ * see, because "stack" reads as a liquidity stack in a product that also has
  * those.
  */
 interface Stack {
@@ -70,7 +70,7 @@ function newStack(index: number, perPack: string): Stack {
  * then refuses every purchase. Every such mismatch is caught here with the
  * numbers spelled out.
  *
- * Naming: the contract's wire format says "pool"; everything a user reads says
+ * Naming: the contract's wire format says "stack"; everything a user reads says
  * "stack".
  */
 export function ListBucketForm({
@@ -185,10 +185,10 @@ export function ListBucketForm({
 		setError(null);
 		try {
 			const nftContract = stacks.flatMap((t) => t.picks)[0].nftContract;
-			const entries = stacks.flatMap((t, pool) =>
-				t.picks.map((p) => ({ tokenId: p.tokenId, amount: p.amount, pool }))
+			const entries = stacks.flatMap((t, stack) =>
+				t.picks.map((p) => ({ tokenId: p.tokenId, amount: p.amount, stack }))
 			);
-			// packDraws is positional: index = stack (the contract's "pool"). A
+			// packDraws is positional: index = stack (the contract's "stack"). A
 			// stack with no guaranteed slots still needs its 0 so later stacks keep
 			// their index.
 			const packDraws = sellPacks ? stacks.map((t) => slots(t)) : [];

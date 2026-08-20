@@ -6,7 +6,7 @@ import {
 	type BundleListing,
 	type BucketListing,
 	type BucketEntry,
-	type BucketPool,
+	type BucketStack,
 	type Listing,
 	type MagiConfig,
 	type MarketInfo,
@@ -71,15 +71,15 @@ export interface MarketProvider {
 	 * What is actually still inside a bucket, per token. Unlike bundles this
 	 * does NOT need a node state read — the contract emits its entries, so the
 	 * indexer can expand them. That is deliberate: a contract-picked draw is
-	 * only fair if the pool is public, so buyers can compute their own odds.
+	 * only fair if the stack is public, so buyers can compute their own odds.
 	 */
 	getBucketEntries(bucketId: number): Promise<BucketEntry[]>;
 	/**
-	 * Units left per pool. Check this before offering a pack: a bucket with
+	 * Units left per stack. Check this before offering a pack: a bucket with
 	 * guaranteed slots drains unevenly, so the grand total can look healthy
-	 * while the guaranteed pool is empty and no pack can be filled.
+	 * while the guaranteed stack is empty and no pack can be filled.
 	 */
-	getBucketPools(bucketId: number): Promise<BucketPool[]>;
+	getBucketStacks(bucketId: number): Promise<BucketStack[]>;
 	getSwaps(filter?: { proposer?: string; activeOnly?: boolean }): Promise<SwapProposal[]>;
 	getRentals(filter?: { owner?: string; renter?: string; activeOnly?: boolean }): Promise<RentalListing[]>;
 	getMintSpotListings(filter?: { lister?: string; nftContract?: string; activeOnly?: boolean }): Promise<MintSpotListing[]>;
@@ -203,16 +203,16 @@ interface BucketRow {
 interface BucketEntryRow {
 	bucket_id: unknown;
 	token_id: string;
-	pool: unknown;
+	stack: unknown;
 	amount_stocked: unknown;
 	amount_drawn: unknown;
 	amount_dropped: unknown;
 	amount_left: unknown;
 }
 
-interface BucketPoolRow {
+interface BucketStackRow {
 	bucket_id: unknown;
-	pool: unknown;
+	stack: unknown;
 	units_stocked: unknown;
 	units_left: unknown;
 	distinct_tokens: unknown;
@@ -282,8 +282,8 @@ const BUCKET_COLS =
 	'expiration_block fee_bps royalty_bps royalty_recipient entry_count units_stocked units_left ' +
 	'units_left_reported units_drawn units_dropped purchases sold_out delisted active ' +
 	'indexer_block_height indexer_ts';
-const BUCKET_ENTRY_COLS = 'bucket_id token_id pool amount_stocked amount_drawn amount_dropped amount_left';
-const BUCKET_POOL_COLS = 'bucket_id pool units_stocked units_left distinct_tokens';
+const BUCKET_ENTRY_COLS = 'bucket_id token_id stack amount_stocked amount_drawn amount_dropped amount_left';
+const BUCKET_STACK_COLS = 'bucket_id stack units_stocked units_left distinct_tokens';
 /**
  * A bucket may hold up to 512 entries, but the indexer's Hasura role caps EVERY
  * response at 100 rows and silently ignores a larger `limit`. Asking for 100 is
@@ -399,7 +399,7 @@ function mapBucketEntry(r: BucketEntryRow): BucketEntry {
 	return {
 		bucketId: num(r.bucket_id),
 		tokenId: r.token_id,
-		pool: num(r.pool),
+		stack: num(r.stack),
 		amountStocked: num(r.amount_stocked),
 		amountDrawn: num(r.amount_drawn),
 		amountDropped: num(r.amount_dropped),
@@ -407,10 +407,10 @@ function mapBucketEntry(r: BucketEntryRow): BucketEntry {
 	};
 }
 
-function mapBucketPool(r: BucketPoolRow): BucketPool {
+function mapBucketStack(r: BucketStackRow): BucketStack {
 	return {
 		bucketId: num(r.bucket_id),
-		pool: num(r.pool),
+		stack: num(r.stack),
 		unitsStocked: num(r.units_stocked),
 		unitsLeft: num(r.units_left),
 		distinctTokens: num(r.distinct_tokens)
@@ -553,7 +553,7 @@ export function createMarketProvider(
 	/**
 	 * Like `indexerList` but without an `order_by`.
 	 *
-	 * The bucket entry/pool views are GROUPED aggregates spanning a listing and
+	 * The bucket entry/stack views are GROUPED aggregates spanning a listing and
 	 * every restock, so they carry no single indexer_block_height to sort on —
 	 * asking Hasura to order by it would just error.
 	 */
@@ -726,13 +726,13 @@ export function createMarketProvider(
 				MAX_BUCKET_ENTRY_ROWS,
 				mapBucketEntry
 			),
-		getBucketPools: (bucketId: number) =>
-			indexerListUnordered<BucketPoolRow, BucketPool>(
-				'magi_market_bucket_pools',
-				BUCKET_POOL_COLS,
+		getBucketStacks: (bucketId: number) =>
+			indexerListUnordered<BucketStackRow, BucketStack>(
+				'magi_market_bucket_stacks',
+				BUCKET_STACK_COLS,
 				{ bucket_id: { _eq: bucketId } },
 				16,
-				mapBucketPool
+				mapBucketStack
 			),
 		getBundles: (f = {}) =>
 			indexerList<BundleRow, BundleListing>(

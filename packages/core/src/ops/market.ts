@@ -187,7 +187,7 @@ export interface ListParams {
 	payoutMode?: '' | 'default' | 'unmap';
 	payoutL1Address?: string;
 	/** F2 DEX-routed settlement opt-in. */
-	dexPool?: string;
+	dexStack?: string;
 	settleToken?: string;
 	minSettleOut?: string;
 }
@@ -222,7 +222,7 @@ function listPayload(p: ListParams): Record<string, unknown> {
 		startBlock: p.startBlock ?? 0,
 		payoutMode: p.payoutMode ?? '',
 		payoutL1Address: p.payoutL1Address ?? '',
-		dexPool: p.dexPool ?? '',
+		dexStack: p.dexStack ?? '',
 		settleToken: p.settleToken ?? '',
 		minSettleOut: p.minSettleOut ?? ''
 	};
@@ -558,7 +558,7 @@ export function buildDelistBundle(ctx: MarketOpContext, p: { bundleId: number })
  * ============================================================ */
 
 /**
- * A bucket is a pool of already-minted units sold at a fixed price, where the
+ * A bucket is a stack of already-minted units sold at a fixed price, where the
  * CONTRACT picks which unit the buyer receives. That is what makes packs,
  * raffles and gacha machines possible: doing the pick client-side would not
  * work, because listings are public and a buyer could simply read which token
@@ -573,11 +573,11 @@ export interface BucketEntryParam {
 	/** Units of this token in the bucket. >1 stocks an edition. */
 	amount: number;
 	/**
-	 * Which pool this entry belongs to (0-7). Pools are what turn "a random
-	 * card" into "a GUARANTEED rare": a pack slot draws from one pool only, so
-	 * an entry in the rare pool can only ever fill a rare slot.
+	 * Which stack this entry belongs to (0-7). Stacks are what turn "a random
+	 * card" into "a GUARANTEED rare": a pack slot draws from one stack only, so
+	 * an entry in the rare stack can only ever fill a rare slot.
 	 */
-	pool?: number;
+	stack?: number;
 }
 
 /** Entries one call may add. The contract rejects more. */
@@ -594,8 +594,8 @@ export interface ListBucketParams {
 	/** Price for one pack. "0" (or omitted) disables pack sales. */
 	pricePerPack?: string;
 	/**
-	 * Draws per pool, e.g. `[5]` is a flat five-card pack and `[4,1]` is four
-	 * from pool 0 plus one from pool 1 — the second is what "every pack has a
+	 * Draws per stack, e.g. `[5]` is a flat five-card pack and `[4,1]` is four
+	 * from stack 0 plus one from stack 1 — the second is what "every pack has a
 	 * rare" means. Required whenever a pack price is set.
 	 */
 	packDraws?: number[];
@@ -614,8 +614,8 @@ function assertBucketEntries(entries: BucketEntryParam[], where: string) {
 	for (const e of entries) {
 		assertSafeAmount(e.amount, `${where}.entries.amount`);
 		if (e.amount < 1) throw new Error(`${where}: amount must be at least 1`);
-		if (e.pool !== undefined && (e.pool < 0 || e.pool > 7)) {
-			throw new Error(`${where}: pool must be 0-7, got ${e.pool}`);
+		if (e.stack !== undefined && (e.stack < 0 || e.stack > 7)) {
+			throw new Error(`${where}: stack must be 0-7, got ${e.stack}`);
 		}
 		if (seen.has(e.tokenId)) {
 			throw new Error(`${where}: duplicate tokenId "${e.tokenId}" — one entry per token`);
@@ -643,7 +643,7 @@ export function buildListBucket(ctx: MarketOpContext, p: ListBucketParams): Mark
 	if (packDraws.some((d) => d < 0)) throw new Error('listBucket: packDraws cannot be negative');
 	return bundle(ctx, 'listBucket', {
 		nftContract: p.nftContract,
-		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, pool: e.pool ?? 0 })),
+		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, stack: e.stack ?? 0 })),
 		paymentToken: p.paymentToken,
 		pricePerDraw: perDraw,
 		pricePerPack: perPack,
@@ -666,7 +666,7 @@ export function buildAddToBucket(
 	assertBucketEntries(p.entries, 'addToBucket');
 	return bundle(ctx, 'addToBucket', {
 		bucketId: p.bucketId,
-		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, pool: e.pool ?? 0 }))
+		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, stack: e.stack ?? 0 }))
 	});
 }
 
