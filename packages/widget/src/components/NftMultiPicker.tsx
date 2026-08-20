@@ -7,6 +7,7 @@ import {
 	type NftItem
 } from '@vsc.eco/token-sdk';
 import { Spinner } from './Spinner.js';
+import { useCollectionMeta } from './useCollectionMeta.js';
 import magiSvg from '../assets/magi.svg';
 
 /** One picked entry: `nftContract:tokenId` + the amount the user wants to
@@ -165,6 +166,7 @@ export function NftMultiPicker({
 
 	const [items, setItems] = useState<NftItem[]>([]);
 	const [images, setImages] = useState<Map<string, string | null>>(new Map());
+	const collMeta = useCollectionMeta(config);
 	const [loading, setLoading] = useState(false);
 	const [err, setErr] = useState<string | null>(null);
 	const [query, setQuery] = useState('');
@@ -352,7 +354,8 @@ export function NftMultiPicker({
 			</div>
 			{effectiveLock && (
 				<span className="magi-market-field-hint">
-					Bundle must come from a single collection. Showing {effectiveLock} only — clear the selection to switch.
+					Everything must come from one collection. Showing{' '}
+					<strong>{collMeta.name(effectiveLock)}</strong> only — clear the selection to switch.
 				</span>
 			)}
 		</div>

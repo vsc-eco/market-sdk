@@ -1988,6 +1988,22 @@
 
 
 /* ---- bucket wizard: use the width for NFTs, not for stretching inputs ---- */
+/* Fields were sitting flush against each other — a label reads as belonging to
+   whichever input it is nearest, so with no gap between fields the grouping is
+   ambiguous. The gap here is deliberately larger than the 0.3rem INSIDE a field
+   (label to input), so each label clearly attaches downward to its own control. */
+.magi-market-bucketform {
+	display: flex;
+	flex-direction: column;
+	gap: 1.15rem;
+}
+/* A stack's own contents stay tighter than the gaps between top-level fields —
+   it is one thing, not several. */
+.magi-market-bucketform .magi-market-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+}
 /* The card is 520px on desktop so the picker can show three NFTs per row. That
    width is for the GRID — a text input stretched to 485px is just a bigger text
    input, and a line of prose that long is harder to read, not easier. */
