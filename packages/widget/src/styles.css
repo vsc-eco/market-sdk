@@ -2224,3 +2224,77 @@
 	flex: 1 1 0;
 	width: auto;
 }
+
+/* Format badge on a tile. The buy-now tab mixes singles, bundles, random
+   packs and mint spots in one grid, so the tile has to say which it is.
+   Sits on the image rather than under it: the grid is scanned by picture,
+   and a line of text below would be read only after the choice was made. */
+.magi-market-tile-image {
+	position: relative;
+}
+.magi-market-tile-badge {
+	position: absolute;
+	top: 0.35rem;
+	left: 0.35rem;
+	padding: 0.1rem 0.4rem;
+	border-radius: 999px;
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.62);
+	backdrop-filter: blur(2px);
+	pointer-events: none;
+}
+.magi-market-tile-badge.bundle { background: rgba(37, 99, 235, 0.85); }
+.magi-market-tile-badge.random { background: rgba(147, 51, 234, 0.85); }
+.magi-market-tile-badge.mint   { background: rgba(5, 150, 105, 0.85); }
+
+/* Format filter chips above the grouped grid. */
+.magi-market-kindchips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-bottom: 0.6rem;
+}
+.magi-market-kindchip {
+	padding: 0.28rem 0.7rem;
+	border-radius: 999px;
+	border: 1px solid var(--magi-field-border);
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.magi-market-kindchip:hover { background: var(--magi-accent-light); }
+.magi-market-kindchip.active {
+	background: var(--magi-accent);
+	border-color: var(--magi-accent);
+	color: #fff;
+}
+.magi-market-kindchip-count {
+	opacity: 0.7;
+	margin-left: 0.3rem;
+	font-size: 0.72rem;
+}
+
+/* Keep a tile's action row on ONE line. The buy-now grid mixes formats with
+   different button labels, and a row that wraps for some tiles and not others
+   makes a grid of uneven cards out of what is meant to be a scannable wall. */
+.magi-market-tile-actions {
+	flex-wrap: nowrap;
+}
+.magi-market-tile-actions .magi-market-submit {
+	flex: 1 1 0;
+	min-width: 0;
+	padding-left: 0.4rem;
+	padding-right: 0.4rem;
+	white-space: nowrap;
+}
+.magi-market-tile-per {
+	opacity: 0.65;
+	font-size: 0.86em;
+}
