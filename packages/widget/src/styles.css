@@ -2193,3 +2193,18 @@
 	flex-direction: column;
 	gap: 0.7rem;
 }
+
+/* The "already approved" opt-out, wherever a form offers it. */
+.magi-market-approved {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+}
+.magi-market-approved input {
+	accent-color: var(--magi-accent);
+	flex: 0 0 auto;
+}
+.magi-market-approved .magi-market-field-hint {
+	margin: 0;
+}

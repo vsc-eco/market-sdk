@@ -97,6 +97,7 @@ export function ListBucketForm({
 	const [pricePerDraw, setPricePerDraw] = useState('');
 	const [pricePerPack, setPricePerPack] = useState('');
 	const [expirationBlock, setExpirationBlock] = useState<number | null>(null);
+	const [skipApproval, setSkipApproval] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [txId, setTxId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -198,7 +199,8 @@ export function ListBucketForm({
 				pricePerDraw: sellSingles ? microDraw : '0',
 				pricePerPack: sellPacks ? microPack : '0',
 				packDraws,
-				expirationBlock: expirationBlock ?? 0
+				expirationBlock: expirationBlock ?? 0,
+				skipApproval
 			});
 			const tx = txIds[txIds.length - 1];
 			setTxId(tx);
@@ -498,9 +500,23 @@ export function ListBucketForm({
 									</div>
 								)}
 							</dl>
+							<label className="magi-market-approved">
+								<input
+									type="checkbox"
+									checked={skipApproval}
+									disabled={submitting}
+									onChange={(e) => setSkipApproval((e.target as HTMLInputElement).checked)}
+								/>
+								<span className="magi-market-field-hint">
+									Marketplace already approved on this collection (skip the approve ops)
+								</span>
+							</label>
 							<p className="magi-market-field-hint">
-								You keep the NFTs until they are drawn. Opening a bucket also approves the
-								marketplace to move units of this collection, so expect TWO signature prompts.
+								You keep the NFTs until they are drawn.{' '}
+								{skipApproval
+									? 'One signature: the listing itself.'
+									: `${totalEntries + 1} signature${totalEntries === 0 ? '' : 's'}: one approval per NFT, then the listing. ` +
+										'Approving per NFT rather than the whole collection means the market can only ever move what you put in this bucket.'}
 							</p>
 						</>
 					)}

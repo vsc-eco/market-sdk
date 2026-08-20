@@ -46,6 +46,7 @@ export {
 	// buckets (random-draw sales)
 	buildListBucket,
 	buildListBucketFlow,
+	buildListBundleFlow,
 	buildAddToBucket,
 	buildBuyFromBucket,
 	buildBuyFromBucketWithPayment,

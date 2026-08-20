@@ -953,11 +953,15 @@ export function buildSellNftFlow(
 }
 
 /**
- * Open a bucket, granting the market approval first.
+ * Open a bucket, approving the market for each NFT going into it.
  *
- * A bucket needs blanket operator approval rather than per-token allowances:
- * the contract draws an unpredictable token on each purchase, so it cannot
- * know in advance which token ids it will need to move.
+ * Per-token `approve` calls rather than `setApprovalForAll`: the contract
+ * checks an allowance per entry when the market is not a blanket operator, so
+ * a seller can stock a bucket without handing over the whole collection. The
+ * draw is unpredictable but not unbounded — it can only ever land on an entry
+ * that is in the bucket, and every one of those was approved here.
+ *
+ * `skipApproval` is for a seller who has already granted operator approval.
  */
 export function buildListBucketFlow(
 	ctx: MarketOpContext,
@@ -965,9 +969,35 @@ export function buildListBucketFlow(
 ): MarketOpBundle[] {
 	const out: MarketOpBundle[] = [];
 	if (!p.skipApproval) {
-		out.push(buildNftSetApprovalForAll(ctx, { nftContract: p.nftContract, approved: true }));
+		for (const e of p.entries) {
+			out.push(
+				buildNftApprove(ctx, { nftContract: p.nftContract, tokenId: e.tokenId, amount: e.amount })
+			);
+		}
 	}
 	out.push(buildListBucket(ctx, p));
+	return out;
+}
+
+/**
+ * List a bundle, approving the market for each NFT in it.
+ *
+ * Same reasoning as buckets: a per-item allowance is enough for the contract,
+ * so listing a bundle need not grant blanket control of the collection.
+ */
+export function buildListBundleFlow(
+	ctx: MarketOpContext,
+	p: ListBundleParams & { skipApproval?: boolean }
+): MarketOpBundle[] {
+	const out: MarketOpBundle[] = [];
+	if (!p.skipApproval) {
+		for (const it of p.items) {
+			out.push(
+				buildNftApprove(ctx, { nftContract: p.nftContract, tokenId: it.tokenId, amount: it.amount })
+			);
+		}
+	}
+	out.push(buildListBundle(ctx, p));
 	return out;
 }
 

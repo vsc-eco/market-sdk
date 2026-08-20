@@ -43,6 +43,7 @@ import { useCollectionMeta } from './components/useCollectionMeta.js';
 import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
 import { Spinner } from './components/Spinner.js';
+import { PanelSurface } from './components/PanelSurface.js';
 import { MarketTile } from './components/MarketTile.js';
 import {
 	useChainClock,
@@ -1045,6 +1046,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	];
 
 	return (
+		// Everything below is "inside the panel", so `Modal` renders its
+		// children as a full-panel view rather than a floating dialog.
+		<PanelSurface>
 		<div
 			ref={rootRef}
 			className={`magi-market${bare ? ' bare' : ''}${isNarrow ? ' is-narrow' : ''} ${className ?? ''}`}
@@ -1093,7 +1097,87 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				/>
 			)}
 
-			{!view && (
+			{sheet?.kind === 'sell' && username && (
+				<ListForm
+					client={client}
+					username={username}
+					defaultNftContract={sheet.nftContract}
+					defaultTokenId={sheet.tokenId}
+					onSuccess={success}
+					onClose={() => setSheet(null)}
+				/>
+			)}
+			{sheet?.kind === 'auction' && username && (
+				<CreateAuctionForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'mintspots' && username && (
+				<ListMintSpotsForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'sellToken' && username && (
+				<ListTokenForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'buyToken' && username && (
+				<BuyTokenForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'buyMintSpot' && username && (
+				<BuyMintSpotForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'buy' && username && (
+				<BuyForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'bid' && username && (
+				<MakeBidForm client={client} username={username} auction={sheet.auction} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'acceptOffer' && username && (
+				<AcceptOfferForm client={client} username={username} offer={sheet.offer} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'updateListing' && username && (
+				<UpdateListingForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'sweep' && username && (
+				<SweepForm client={client} username={username} listings={listings} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'listBundle' && username && (
+				<ListBundleForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'buyBundle' && username && (
+				<BuyBundleForm client={client} username={username} bundle={sheet.bundle} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'proposeSwap' && username && (
+				<ProposeSwapForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'acceptSwap' && username && (
+				<AcceptSwapForm client={client} username={username} swap={sheet.swap} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'listRental' && username && (
+				<ListRentalForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'rent' && username && (
+				<RentForm client={client} username={username} rental={sheet.rental} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'admin' && username && (
+				<AdminPanel client={client} username={username} nftContract={sheet.nftContract} onSuccess={success} onClose={() => setSheet(null)} />
+			)}
+			{sheet?.kind === 'offer' && username && (
+				<MakeOfferForm
+					client={client}
+					username={username}
+					defaultNftContract={sheet.listing?.nftContract ?? sheet.nftContract}
+					defaultTokenId={sheet.listing?.tokenId ?? sheet.tokenId}
+					onSuccess={success}
+					onClose={() => setSheet(null)}
+				/>
+			)}
+			{sheet?.kind === 'nftDetails' && (
+				<NftDetails
+					config={config}
+					nftContract={sheet.nftContract}
+					tokenId={sheet.tokenId}
+					onClose={() => setSheet(null)}
+				/>
+			)}
+
+			{!view && !sheet && (
 				<>
 				{/* Top-level section switch, one level ABOVE the market tabs and at
 				    the same level as the header — Explore isn't an order-book view,
@@ -1886,85 +1970,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				</>
 			)}
 
-			{sheet?.kind === 'sell' && username && (
-				<ListForm
-					client={client}
-					username={username}
-					defaultNftContract={sheet.nftContract}
-					defaultTokenId={sheet.tokenId}
-					onSuccess={success}
-					onClose={() => setSheet(null)}
-				/>
-			)}
-			{sheet?.kind === 'auction' && username && (
-				<CreateAuctionForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'mintspots' && username && (
-				<ListMintSpotsForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'sellToken' && username && (
-				<ListTokenForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'buyToken' && username && (
-				<BuyTokenForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'buyMintSpot' && username && (
-				<BuyMintSpotForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'buy' && username && (
-				<BuyForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'bid' && username && (
-				<MakeBidForm client={client} username={username} auction={sheet.auction} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'acceptOffer' && username && (
-				<AcceptOfferForm client={client} username={username} offer={sheet.offer} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'updateListing' && username && (
-				<UpdateListingForm client={client} username={username} listing={sheet.listing} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'sweep' && username && (
-				<SweepForm client={client} username={username} listings={listings} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'listBundle' && username && (
-				<ListBundleForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'buyBundle' && username && (
-				<BuyBundleForm client={client} username={username} bundle={sheet.bundle} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'proposeSwap' && username && (
-				<ProposeSwapForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'acceptSwap' && username && (
-				<AcceptSwapForm client={client} username={username} swap={sheet.swap} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'listRental' && username && (
-				<ListRentalForm client={client} username={username} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'rent' && username && (
-				<RentForm client={client} username={username} rental={sheet.rental} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'admin' && username && (
-				<AdminPanel client={client} username={username} nftContract={sheet.nftContract} onSuccess={success} onClose={() => setSheet(null)} />
-			)}
-			{sheet?.kind === 'offer' && username && (
-				<MakeOfferForm
-					client={client}
-					username={username}
-					defaultNftContract={sheet.listing?.nftContract ?? sheet.nftContract}
-					defaultTokenId={sheet.listing?.tokenId ?? sheet.tokenId}
-					onSuccess={success}
-					onClose={() => setSheet(null)}
-				/>
-			)}
-			{sheet?.kind === 'nftDetails' && (
-				<NftDetails
-					config={config}
-					nftContract={sheet.nftContract}
-					tokenId={sheet.tokenId}
-					onClose={() => setSheet(null)}
-				/>
-			)}
 		</div>
+		</PanelSurface>
 	);
 }

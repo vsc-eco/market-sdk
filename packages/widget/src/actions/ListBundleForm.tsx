@@ -38,6 +38,7 @@ export function ListBundleForm({
 	const [picks, setPicks] = useState<NftMultiPick[]>([]);
 	const [paymentToken, setPaymentToken] = useState('');
 	const [price, setPrice] = useState('');
+	const [skipApproval, setSkipApproval] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [txId, setTxId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -67,14 +68,18 @@ export function ListBundleForm({
 		setError(null);
 		try {
 			const nftContract = picks[0].nftContract;
-			const op = client.ops.listBundleOp(username, {
+			// One `approve` per item rather than setApprovalForAll: the contract
+			// takes a per-token allowance, so listing a bundle need not hand over
+			// the whole collection.
+			const { txIds } = await client.listBundle(username, {
 				nftContract,
 				items: picks.map((p) => ({ tokenId: p.tokenId, amount: p.amount })),
 				paymentToken: paymentToken.trim(),
 				price: microPrice,
-				expirationBlock: 0
+				expirationBlock: 0,
+				skipApproval
 			});
-			const { txId: tx } = await client.broadcast(op);
+			const tx = txIds[txIds.length - 1];
 			setTxId(tx);
 			onSuccess?.(tx);
 		} catch (err) {
@@ -124,6 +129,23 @@ export function ListBundleForm({
 							disabled={submitting}
 						/>
 					</Field>
+
+					<label className="magi-market-approved">
+						<input
+							type="checkbox"
+							checked={skipApproval}
+							disabled={submitting}
+							onChange={(e) => setSkipApproval((e.target as HTMLInputElement).checked)}
+						/>
+						<span className="magi-market-field-hint">
+							Marketplace already approved on this collection (skip the approve ops)
+						</span>
+					</label>
+					<p className="magi-market-field-hint">
+						{skipApproval
+							? 'One signature: the listing itself.'
+							: `${picks.length + 1} signatures: one approval per NFT, then the listing.`}
+					</p>
 
 					{error && <p className="magi-market-status error">{error}</p>}
 

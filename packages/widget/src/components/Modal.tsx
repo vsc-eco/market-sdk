@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { PanelView } from './PanelView';
+import { useInPanel } from './PanelSurface';
 
 interface ModalProps {
 	title: string;
@@ -35,6 +37,19 @@ export function Modal({
 	confirmOnBackdrop = true,
 	confirmMessage = 'Close this window? Anything you entered here will be lost.'
 }: ModalProps) {
+	const inPanel = useInPanel();
+
+	// Inside the market panel the form takes the panel over instead of
+	// floating above it — see `PanelSurface`. No backdrop, so nothing to
+	// guard: the only way out is the explicit Back control.
+	if (inPanel) {
+		return (
+			<PanelView title={title} subtitle={subtitle} onBack={onClose}>
+				{children}
+			</PanelView>
+		);
+	}
+
 	const onBackdropClick = () => {
 		if (confirmOnBackdrop && typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
 			return;
