@@ -485,16 +485,32 @@ export function buildSetMinOffer(ctx: MarketOpContext, p: { minOffer: string }):
  *  Floor sweep + bundles
  * ============================================================ */
 
-/** Buy the cheapest listings of a collection atomically, slippage-guarded by `maxTotal`. */
+/**
+ * Buy the cheapest listings of a collection atomically, slippage-guarded by
+ * `maxTotal`.
+ *
+ * `paymentToken` names the ONE asset the sweep spends. `maxTotal` is a bare
+ * integer with no currency of its own, and every listing is paid for in
+ * whatever token it was priced in, so a mix would total two currencies into a
+ * cap belonging to neither — the contract rejects any listing priced in
+ * something else. Omitting it makes the contract fall back to the first
+ * listing's token, which is safe but leaves the caller trusting whichever
+ * listing happens to be first; pass it.
+ */
 export function buildSweep(
 	ctx: MarketOpContext,
-	p: { nftContract: string; listingIds: number[]; maxTotal: string },
+	p: { nftContract: string; listingIds: number[]; maxTotal: string; paymentToken?: string },
 	intents?: VscIntent[]
 ): MarketOpBundle {
 	return bundle(
 		ctx,
 		'sweep',
-		{ nftContract: p.nftContract, listingIds: p.listingIds, maxTotal: p.maxTotal },
+		{
+			nftContract: p.nftContract,
+			listingIds: p.listingIds,
+			maxTotal: p.maxTotal,
+			...(p.paymentToken ? { paymentToken: p.paymentToken } : {})
+		},
 		undefined,
 		intents
 	);

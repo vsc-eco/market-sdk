@@ -257,7 +257,7 @@ export interface MarketClient {
 		setCollectionFeeOp(username: string, p: { nftContract: string; feeBps: number }): MarketOpBundle;
 		clearCollectionFeeOp(username: string, p: { nftContract: string }): MarketOpBundle;
 		setMinOfferOp(username: string, p: { minOffer: string }): MarketOpBundle;
-		sweepOp(username: string, p: { nftContract: string; listingIds: number[]; maxTotal: string }, intents?: VscIntent[]): MarketOpBundle;
+		sweepOp(username: string, p: { nftContract: string; listingIds: number[]; maxTotal: string; paymentToken?: string }, intents?: VscIntent[]): MarketOpBundle;
 		listBundleOp(username: string, p: ListBundleParams): MarketOpBundle;
 		buyBundleOp(username: string, p: { bundleId: number }, intents?: VscIntent[]): MarketOpBundle;
 		delistBundleOp(username: string, p: { bundleId: number }): MarketOpBundle;

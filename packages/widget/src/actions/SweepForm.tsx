@@ -176,7 +176,11 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 				{
 					nftContract,
 					listingIds: selected.map((l) => l.listingId),
-					maxTotal: maxTotalMicro
+					maxTotal: maxTotalMicro,
+					// Sent explicitly: the contract otherwise takes the first
+					// listing's token, and the buyer's budget is denominated in
+					// what they picked, not in whatever sorted first.
+					paymentToken: payToken
 				},
 				intents
 			);
