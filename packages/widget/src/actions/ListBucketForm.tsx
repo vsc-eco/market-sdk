@@ -86,6 +86,8 @@ export function ListBucketForm({
 	const [step, setStep] = useState(0);
 	const [sellSingles, setSellSingles] = useState(true);
 	const [sellPacks, setSellPacks] = useState(false);
+	/** Pending sale-type change that would throw work away, awaiting a yes. */
+	const [confirmTypeChange, setConfirmTypeChange] = useState(false);
 	const [stacks, setStacks] = useState<Stack[]>([newStack(0, '0')]);
 	/**
 	 * Which stack is expanded. Only one at a time: each stack carries a full NFT
@@ -139,6 +141,9 @@ export function ListBucketForm({
 		return limits.length ? Math.min(...limits) : 0;
 	}, [stacks, sellPacks, packSize]);
 
+	/** More than one stack, or anything picked — i.e. a change would cost something. */
+	const hasStackWork = stacks.length > 1 || stacks.some((t) => t.picks.length > 0);
+
 	const updateStack = (i: number, patch: Partial<Stack>) =>
 		setStacks((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)));
 
@@ -160,11 +165,6 @@ export function ListBucketForm({
 				if (short)
 					return `"${short.name}" promises ${slots(short)} per pack but only has ${units(short)} unit${units(short) === 1 ? '' : 's'}.`;
 			}
-			// A single draw always comes from stack 0. Without packs, the rest
-			// would be escrowed and undrawable — so this blocks rather than
-			// warns, and the step offers a one-click merge.
-			if (!sellPacks && stacks.length > 1)
-				return `Single draws only come from "${stacks[0].name}". Merge your stacks into one, or sell packs too.`;
 			// Single draws always come from the first stack, so it must have stock.
 			if (sellSingles && units(stacks[0]) === 0)
 				return `Single draws come from "${stacks[0].name}", which is empty.`;
@@ -276,7 +276,17 @@ export function ListBucketForm({
 									className={`magi-market-option${sellPacks ? ' selected' : ''}`}
 									aria-pressed={sellPacks}
 									disabled={submitting}
-									onClick={() => setSellPacks(!sellPacks)}
+									onClick={() => {
+										// Turning packs off makes stacks meaningless — a single
+										// draw only ever comes from stack 0 — so the stacks have
+										// to go. Ask before throwing away the picks rather than
+										// silently rearranging them.
+										if (sellPacks && hasStackWork) {
+											setConfirmTypeChange(true);
+											return;
+										}
+										setSellPacks(!sellPacks);
+									}}
 								>
 									<span className="magi-market-option-title">Packs</span>
 									<span className="magi-market-option-desc">
@@ -371,43 +381,6 @@ export function ListBucketForm({
 							    comes from stack 0, so a singles-only sale with several
 							    stacks escrows NFTs nobody can ever pull. Rather than
 							    warn about it afterwards, the control is not offered. */}
-							{!sellPacks && stacks.length > 1 && (
-								<div className="magi-market-status warn">
-									<p style={{ margin: '0 0 0.5rem' }}>
-										Single draws only ever come from “{stacks[0].name}”. The other{' '}
-										{stacks.length === 2 ? 'stack' : `${stacks.length - 1} stacks`} would be
-										escrowed and undrawable.
-									</p>
-									<button
-										type="button"
-										className="magi-market-submit ghost"
-										style={{ width: 'auto' }}
-										disabled={submitting}
-										onClick={() =>
-											// Merge rather than discard: the picks are the work,
-											// the grouping is not.
-											setStacks((prev) => {
-												// Sum by token rather than concatenating: the same
-												// NFT can sit in two stacks, and two entries for one
-												// token in one stack would list it twice.
-												const byToken = new Map<string, NftMultiPick>();
-												for (const t of prev) {
-													for (const pick of t.picks) {
-														const k = `${pick.nftContract}:${pick.tokenId}`;
-														const at = byToken.get(k);
-														if (at) at.amount += pick.amount;
-														else byToken.set(k, { ...pick });
-													}
-												}
-												setOpenStack(0);
-												return [{ ...prev[0], picks: Array.from(byToken.values()) }];
-											})
-										}
-									>
-										Merge into one stack
-									</button>
-								</div>
-							)}
 							{sellPacks && stacks.length < MAX_STACKS && (
 								<button
 									type="button"
@@ -608,7 +581,54 @@ export function ListBucketForm({
 		</>
 	);
 
+	// Written out rather than reusing Modal: inside the panel Modal renders as
+	// a full PanelView, and this wants to sit over the step it is asking about.
+	const typeChangeConfirm = confirmTypeChange ? (
+		<div
+			className="magi-market-modal"
+			role="dialog"
+			aria-modal="true"
+			onClick={() => setConfirmTypeChange(false)}
+		>
+			<div
+				className="magi-market-modal-card magi-market-confirm"
+				onClick={(e) => e.stopPropagation()}
+			>
+				<h3 className="magi-market-modal-title">
+					<span>Stop selling packs?</span>
+				</h3>
+				<p className="magi-market-field-hint">
+					Single draws only ever come from the first stack, so the stacks you built no
+					longer mean anything — the NFTs you picked will be cleared and you start the
+					selection again.
+				</p>
+				<div className="magi-market-confirm-actions">
+					<button
+						type="button"
+						className="magi-market-submit ghost"
+						onClick={() => setConfirmTypeChange(false)}
+					>
+						Keep packs
+					</button>
+					<button
+						type="button"
+						className="magi-market-submit"
+						onClick={() => {
+							setSellPacks(false);
+							setStacks([newStack(0, '0')]);
+							setOpenStack(0);
+							setConfirmTypeChange(false);
+						}}
+					>
+						Clear and change
+					</button>
+				</div>
+			</div>
+		</div>
+	) : null;
+
 	return inline ? (
+
 		<PanelView
 			title="Mystery sale"
 			subtitle={subtitle}
@@ -616,10 +636,12 @@ export function ListBucketForm({
 			confirmMessage="The stacks you set up here will be lost."
 		>
 			{body}
+			{typeChangeConfirm}
 		</PanelView>
 	) : (
 		<Modal wide title="Mystery sale" subtitle={subtitle} onClose={onClose}>
 			{body}
+			{typeChangeConfirm}
 		</Modal>
 	);
 }
