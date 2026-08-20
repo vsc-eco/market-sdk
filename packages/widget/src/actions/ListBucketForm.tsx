@@ -396,6 +396,18 @@ export function ListBucketForm({
 								onChange={setPaymentToken}
 								disabled={submitting}
 							/>
+							{/* A single draw always comes from stack 0 — the contract
+							    only spreads across stacks for a PACK, via packDraws.
+							    So singles-only plus several stacks means everything
+							    past the first is stocked but unreachable. */}
+							{sellSingles && !sellPacks && stacks.length > 1 && (
+								<p className="magi-market-status warn">
+									Single draws only ever come from your first stack
+									{stacks[0]?.name ? ` (${stacks[0].name})` : ''}. The other
+									{stacks.length === 2 ? ' stack' : ` ${stacks.length - 1} stacks`} would sit
+									there undrawable — turn on packs, or move everything into one stack.
+								</p>
+							)}
 							{sellSingles && (
 								<Field label="Price per draw">
 									<TextInput
@@ -564,7 +576,7 @@ export function ListBucketForm({
 
 	return inline ? (
 		<PanelView
-			title="Open a bucket"
+			title="Mystery sale"
 			subtitle={subtitle}
 			onBack={onClose}
 			confirmMessage="The stacks you set up here will be lost."
@@ -572,7 +584,7 @@ export function ListBucketForm({
 			{body}
 		</PanelView>
 	) : (
-		<Modal wide title="Open a bucket" subtitle={subtitle} onClose={onClose}>
+		<Modal wide title="Mystery sale" subtitle={subtitle} onClose={onClose}>
 			{body}
 		</Modal>
 	);

@@ -181,7 +181,7 @@ export function BuyTile({
 					// No thumbnail on purpose: showing one card from a random
 					// draw would read as the card you get.
 					imageUrl={null}
-					label={`Bucket #${b.bucketId}`}
+					label={`Mystery #${b.bucketId}`}
 					subtitle={<>{b.unitsStocked} left{b.packSize > 0 ? ` · packs of ${b.packSize}` : ''}</>}
 					price={<>{tokenMeta.format(b.paymentToken, it.price)} {sym}<span className="magi-market-tile-per">{singles ? '/draw' : '/pack'}</span></>}
 					onOpen={() => onSheet({ kind: 'bucketDetail', bucket: b })}

@@ -31,6 +31,8 @@ function ago(at?: string): string {
 }
 
 const bare = (a: string) => a.replace(/^hive:/, '');
+/** Rows store `hive:alice`; the panel's `me` is already stripped to `alice`. */
+const norm = (a?: string) => bare((a ?? '').trim()).toLowerCase();
 
 /**
  * What has actually been happening.
@@ -54,7 +56,7 @@ export function ActivityFeed({
 	return (
 		<ul className="magi-market-activity">
 			{events.map((e, i) => {
-				const isMe = !!me && e.actor === me;
+				const isMe = !!me && norm(e.actor) === norm(me);
 				const price = formatPrice(e.paymentToken, e.price);
 				const what =
 					e.tokenId && e.nftContract ? (

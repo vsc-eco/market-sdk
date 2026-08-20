@@ -486,6 +486,20 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	// so "alicante", "tibfox" and a collection name all find something.
 	const [exploreFilters, setExploreFilters] = useState<ExploreFilterState>(DEFAULT_EXPLORE_FILTERS);
 
+	/**
+	 * Activity's filters. `who` and `collection` are sent to the indexer
+	 * because they change WHICH rows exist; `kind` and `range` narrow what
+	 * came back. Filtering "yours" client-side would have been a lie — it
+	 * would show your events only if they happened to fall inside the last
+	 * page of everyone's.
+	 */
+	const [activityFilters, setActivityFilters] = useState<{
+		kind: 'any' | ActivityEvent['kind'];
+		who: 'any' | 'me';
+		collection: string;
+		range: 'any' | '1d' | '7d' | '30d';
+	}>({ kind: 'any', who: 'any', collection: '', range: 'any' });
+
 	/** `contract:tokenId` of everything currently listed, for the availability filter. */
 	const listedKeys = useMemo(
 		() => new Set(listings.filter((l) => l.active).map((l) => `${l.nftContract}:${l.tokenId}`)),
@@ -652,10 +666,20 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				return;
 			}
 			if (section === 'activity') {
+				const who =
+					activityFilters.who === 'me'
+						? username && username.startsWith('hive:')
+							? username
+							: username
+								? `hive:${username}`
+								: undefined
+						: viewAccount;
 				setActivity(
-					await client.provider.getActivity(
-						viewAccount ? { account: viewAccount, limit: 60 } : { limit: 60 }
-					)
+					await client.provider.getActivity({
+						...(who ? { account: who } : {}),
+						...(activityFilters.collection ? { nftContract: activityFilters.collection } : {}),
+						limit: 60
+					})
 				);
 				return;
 			}
@@ -727,7 +751,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		} finally {
 			setLoading(false);
 		}
-	}, [client, tab, section, viewAccount]);
+	}, [client, tab, section, viewAccount, activityFilters.who, activityFilters.collection, username]);
 
 	useEffect(() => {
 		void load();
@@ -1109,6 +1133,30 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		});
 	}, [buyItems, matchesFilters, exploreQuery, collMeta]);
 
+	/** Collections present in the feed, so the picker only offers real ones. */
+	const activityCollections = useMemo(() => {
+		const seen = new Set<string>();
+		for (const e of activity) if (e.nftContract) seen.add(e.nftContract);
+		if (activityFilters.collection) seen.add(activityFilters.collection);
+		return Array.from(seen).sort((a, b) => collMeta.name(a).localeCompare(collMeta.name(b)));
+	}, [activity, activityFilters.collection, collMeta]);
+
+	/** Kind and age narrow what came back; who and collection were the query. */
+	const shownActivity = useMemo(() => {
+		const ms = { '1d': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000 } as const;
+		const cutoff =
+			activityFilters.range === 'any' ? null : Date.now() - ms[activityFilters.range];
+		return activity.filter((e) => {
+			if (activityFilters.kind !== 'any' && e.kind !== activityFilters.kind) return false;
+			if (cutoff != null) {
+				if (!e.at) return false;
+				const t = new Date(e.at.endsWith('Z') ? e.at : `${e.at}Z`).getTime();
+				if (!Number.isFinite(t) || t < cutoff) return false;
+			}
+			return true;
+		});
+	}, [activity, activityFilters.kind, activityFilters.range]);
+
 	/**
 	 * Sales per collection in the last day. A collection selling steadily and
 	 * one that has never sold anything look identical without it, and that is
@@ -1396,7 +1444,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						{[
 							{ label: 'Sell an NFT', hint: 'One NFT at a fixed price.', go: () => setSheet({ kind: 'sell' as const }) },
 							{ label: 'Create bundle', hint: 'Several NFTs as one all-or-nothing lot.', go: () => setSheet({ kind: 'listBundle' as const }) },
-							{ label: 'Open a bucket', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
+							{ label: 'Mystery sale', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
 							{ label: 'Sell mint spots', hint: 'The right to mint a fresh edition.', go: () => setSheet({ kind: 'mintspots' as const }) },
 							{
 								label: 'Sweep',
@@ -1418,7 +1466,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			{sheet?.kind === 'reveal' && (
 				<PanelView
 					title="You pulled"
-					subtitle={`Bucket #${sheet.bucket.bucketId} · ${collMeta.name(sheet.bucket.nftContract)}`}
+					subtitle={`Mystery sale #${sheet.bucket.bucketId} · ${collMeta.name(sheet.bucket.nftContract)}`}
 					onBack={() => setSheet(null)}
 					confirmOnLeave={false}
 				>
@@ -1457,7 +1505,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			)}
 			{sheet?.kind === 'bucketDetail' && (
 				<PanelView
-					title={`Bucket #${sheet.bucket.bucketId}`}
+					title={`Mystery sale #${sheet.bucket.bucketId}`}
 					subtitle={`Random draw from ${collMeta.name(sheet.bucket.nftContract)} — every stack and its odds`}
 					onBack={() => setSheet(null)}
 					confirmOnLeave={false}
@@ -1541,18 +1589,119 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					<p className="magi-market-subtitle" style={{ marginBottom: '0.7rem' }}>
 						{viewAccount ? `What ${viewAccount.replace(/^hive:/, '')} has been buying` : 'What has been selling'}
 					</p>
+					<div className="magi-market-xfilters">
+						<div className="magi-market-xfilter-group">
+							<span className="magi-market-field-label">Kind</span>
+							<div className="magi-market-xfilter-chips">
+								{([
+									['any', 'Everything'],
+									['bought', 'Bought'],
+									['mintSpotBought', 'Minted'],
+									['bundleBought', 'Bundles'],
+									['bucketPurchase', 'Packs'],
+									['swept', 'Sweeps']
+								] as Array<['any' | ActivityEvent['kind'], string]>).map(([id, label]) => (
+									<button
+										key={id}
+										type="button"
+										className={`magi-market-kindchip${activityFilters.kind === id ? ' active' : ''}`}
+										onClick={() => setActivityFilters((f) => ({ ...f, kind: id }))}
+									>
+										{label}
+									</button>
+								))}
+							</div>
+						</div>
+						<div className="magi-market-xfilter-group">
+							<span className="magi-market-field-label">Who</span>
+							<div className="magi-market-xfilter-chips">
+								{([
+									['any', 'Everyone'],
+									['me', 'You']
+								] as Array<['any' | 'me', string]>).map(([id, label]) => (
+									<button
+										key={id}
+										type="button"
+										disabled={id === 'me' && !username}
+										className={`magi-market-kindchip${activityFilters.who === id ? ' active' : ''}`}
+										onClick={() => setActivityFilters((f) => ({ ...f, who: id }))}
+									>
+										{label}
+									</button>
+								))}
+							</div>
+						</div>
+						<div className="magi-market-xfilter-group">
+							<span className="magi-market-field-label">When</span>
+							<div className="magi-market-xfilter-chips">
+								{([
+									['any', 'Any time'],
+									['1d', '24h'],
+									['7d', '7 days'],
+									['30d', '30 days']
+								] as Array<['any' | '1d' | '7d' | '30d', string]>).map(([id, label]) => (
+									<button
+										key={id}
+										type="button"
+										className={`magi-market-kindchip${activityFilters.range === id ? ' active' : ''}`}
+										onClick={() => setActivityFilters((f) => ({ ...f, range: id }))}
+									>
+										{label}
+									</button>
+								))}
+							</div>
+						</div>
+						{activityCollections.length > 1 && (
+							<div className="magi-market-xfilter-group">
+								<span className="magi-market-field-label">Collection</span>
+								<div className="magi-market-xfilter-chips">
+									<button
+										type="button"
+										className={`magi-market-kindchip${activityFilters.collection === '' ? ' active' : ''}`}
+										onClick={() => setActivityFilters((f) => ({ ...f, collection: '' }))}
+									>
+										All
+									</button>
+									{activityCollections.map((c) => (
+										<button
+											key={c}
+											type="button"
+											className={`magi-market-kindchip${activityFilters.collection === c ? ' active' : ''}`}
+											onClick={() => setActivityFilters((f) => ({ ...f, collection: c }))}
+										>
+											{collMeta.name(c)}
+										</button>
+									))}
+								</div>
+							</div>
+						)}
+						<button
+							type="button"
+							className="magi-market-submit ghost magi-market-xfilter-reset"
+							onClick={() =>
+								setActivityFilters({ kind: 'any', who: 'any', collection: '', range: 'any' })
+							}
+						>
+							Reset
+						</button>
+					</div>
+
 					{loading ? (
 						<div className="magi-market-state"><Spinner /></div>
 					) : (
 						<ActivityFeed
-							events={activity}
+							events={shownActivity}
 							me={me}
 							collectionName={collMeta.name}
 							formatPrice={(token, micro) =>
 								token && micro ? `${tokenMeta.format(token, micro)} ${tokenMeta.symbol(token)}` : null
 							}
 							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
-							emptyLabel="Nothing has sold yet."
+							emptyLabel={
+								activity.length > 0
+									? 'Nothing matches these filters.'
+									: 'Nothing has sold yet.'
+							}
 						/>
 					)}
 				</>
@@ -1621,7 +1770,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 								<>
 									<ToolbarAction label="Sell an NFT" onClick={() => setSheet({ kind: 'sell' })} />
 									<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} style={{ marginLeft: '0.5rem' }} />
-									<ToolbarAction label="Open a bucket" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
+									<ToolbarAction label="Mystery sale" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
 									<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} style={{ marginLeft: '0.5rem' }} />
 									<ToolbarAction
 										label="Sweep"
