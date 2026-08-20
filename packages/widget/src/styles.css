@@ -2349,3 +2349,213 @@
 }
 .magi-market.is-narrow .magi-market-kindchips::-webkit-scrollbar { display: none; }
 .magi-market.is-narrow .magi-market-kindchip { flex: 0 0 auto; }
+
+/* ---- pack reveal ---------------------------------------------------- */
+.magi-market-reveal {
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+	align-items: center;
+}
+.magi-market-reveal-wait {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 2.5rem 0;
+}
+.magi-market-reveal-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(108px, 132px));
+	gap: 0.7rem;
+	justify-content: center;
+	width: 100%;
+	/* The cards turn in 3D, so the whole set shares one vanishing point —
+	   per-card perspective would make each flip look like its own animation. */
+	perspective: 1200px;
+}
+.magi-market-card {
+	aspect-ratio: 3 / 4;
+	cursor: default;
+}
+.magi-market-card.flipped { cursor: pointer; }
+.magi-market-card-inner {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	transform-style: preserve-3d;
+	transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.magi-market-card.flipped .magi-market-card-inner {
+	transform: rotateY(180deg);
+}
+.magi-market-card-back,
+.magi-market-card-face {
+	position: absolute;
+	inset: 0;
+	backface-visibility: hidden;
+	border-radius: 12px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--magi-card-border);
+}
+.magi-market-card-back {
+	background:
+		repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 6px, transparent 6px 12px),
+		linear-gradient(160deg, var(--magi-accent) 0%, #1b1e2b 85%);
+}
+.magi-market-card-back img { width: 46%; opacity: 0.75; }
+.magi-market-card-face {
+	transform: rotateY(180deg);
+	background: var(--magi-field-bg, #171a24);
+	flex-direction: column;
+}
+.magi-market-card-face img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.magi-market-card-face .magi-market-tile-fallback-img {
+	width: 55%;
+	height: auto;
+	object-fit: contain;
+	opacity: 0.6;
+}
+.magi-market-card-id {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 0.25rem 0.4rem;
+	font-size: 0.68rem;
+	text-align: center;
+	color: #fff;
+	background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* A guaranteed pull is the reason people buy the pack, so it gets the shine
+   — but only once it has actually turned over. */
+.magi-market-card.rare .magi-market-card-face {
+	border-color: var(--magi-accent);
+	box-shadow: 0 0 0 1px var(--magi-accent), 0 6px 22px rgba(124, 106, 255, 0.45);
+}
+.magi-market-card.rare.flipped .magi-market-card-face::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+	transform: translateX(-120%);
+	animation: magi-market-shine 1.1s ease-out 0.35s 1;
+}
+@keyframes magi-market-shine {
+	to { transform: translateX(120%); }
+}
+.magi-market-card-hit {
+	position: absolute;
+	top: 0.3rem;
+	left: 0.3rem;
+	padding: 0.1rem 0.38rem;
+	border-radius: 999px;
+	font-size: 0.6rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #fff;
+	background: var(--magi-accent);
+}
+.magi-market-reveal-sum { margin: 0; text-align: center; }
+.magi-market-reveal-actions { display: flex; gap: 0.5rem; }
+.magi-market-reveal-actions .magi-market-submit { width: auto; padding: 0.5rem 1.4rem; }
+
+/* Respect a system preference for less motion: the cards still turn over,
+   they just stop travelling to do it. */
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-card-inner { transition-duration: 0.001s; }
+	.magi-market-card.rare.flipped .magi-market-card-face::after { animation: none; }
+}
+
+/* ---- activity feed --------------------------------------------------- */
+.magi-market-activity {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+.magi-market-activity-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.7rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 10px;
+	background: var(--magi-card-bg, transparent);
+	font-size: 0.82rem;
+}
+.magi-market-activity-kind {
+	flex: 0 0 auto;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	font-size: 0.66rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #fff;
+	background: rgba(255, 255, 255, 0.16);
+	white-space: nowrap;
+}
+.magi-market-activity-kind.bought { background: rgba(37, 99, 235, 0.85); }
+.magi-market-activity-kind.bucketPurchase { background: rgba(147, 51, 234, 0.85); }
+.magi-market-activity-kind.mintSpotBought { background: rgba(5, 150, 105, 0.85); }
+.magi-market-activity-kind.swept { background: rgba(217, 119, 6, 0.85); }
+.magi-market-activity-main {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-activity-actor { color: var(--magi-text-secondary); }
+.magi-market-activity-actor.me { color: var(--magi-accent); font-weight: 600; }
+.magi-market-activity-coll { color: var(--magi-text-muted); }
+.magi-market-activity-link {
+	border: 0;
+	background: none;
+	padding: 0;
+	font: inherit;
+	color: var(--magi-text);
+	cursor: pointer;
+	text-decoration: underline dotted;
+}
+.magi-market-activity-price { flex: 0 0 auto; white-space: nowrap; }
+.magi-market-activity-ago {
+	flex: 0 0 auto;
+	color: var(--magi-text-muted);
+	font-size: 0.74rem;
+	min-width: 2.2rem;
+	text-align: right;
+}
+
+/* Recent-sales badge on a collection header. */
+.magi-market-heat {
+	flex: 0 0 auto;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	font-size: 0.68rem;
+	color: #fff;
+	background: rgba(217, 119, 6, 0.85);
+	white-space: nowrap;
+}
+
+/* Honesty line when a list came back at the indexer's row ceiling. */
+.magi-market-truncated {
+	margin: 0 0 0.5rem;
+	padding: 0.4rem 0.6rem;
+	border: 1px dashed var(--magi-field-border);
+	border-radius: 8px;
+}

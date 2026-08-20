@@ -7,6 +7,9 @@ import {
 	type BucketListing,
 	type BucketEntry,
 	type BucketStack,
+	type BucketDraw,
+	type ActivityEvent,
+	type ActivityKind,
 	type Listing,
 	type MagiConfig,
 	type MarketInfo,
@@ -80,6 +83,10 @@ export interface MarketProvider {
 	 * while the guaranteed stack is empty and no pack can be filled.
 	 */
 	getBucketStacks(bucketId: number): Promise<BucketStack[]>;
+	/** What a purchase drew, in contract order — the pack reveal reads this. */
+	getBucketDraws(f?: { txId?: string; buyer?: string; bucketId?: number; limit?: number }): Promise<BucketDraw[]>;
+	/** Completed purchases across every format, newest first. */
+	getActivity(f?: { account?: string; nftContract?: string; limit?: number }): Promise<ActivityEvent[]>;
 	getSwaps(filter?: { proposer?: string; activeOnly?: boolean }): Promise<SwapProposal[]>;
 	getRentals(filter?: { owner?: string; renter?: string; activeOnly?: boolean }): Promise<RentalListing[]>;
 	getMintSpotListings(filter?: { lister?: string; nftContract?: string; activeOnly?: boolean }): Promise<MintSpotListing[]>;
@@ -210,6 +217,29 @@ interface BucketEntryRow {
 	amount_left: unknown;
 }
 
+interface BucketDrawRow {
+	bucket_id: unknown;
+	buyer: unknown;
+	token_id: unknown;
+	stack: unknown;
+	draw_index: unknown;
+	indexer_tx_hash?: unknown;
+	indexer_ts?: unknown;
+}
+
+interface ActivityRow {
+	kind: unknown;
+	actor: unknown;
+	nft_contract?: unknown;
+	token_id?: unknown;
+	price?: unknown;
+	payment_token?: unknown;
+	count?: unknown;
+	indexer_tx_hash?: unknown;
+	indexer_block_height?: unknown;
+	indexer_ts?: unknown;
+}
+
 interface BucketStackRow {
 	bucket_id: unknown;
 	stack: unknown;
@@ -284,6 +314,9 @@ const BUCKET_COLS =
 	'indexer_block_height indexer_ts';
 const BUCKET_ENTRY_COLS = 'bucket_id token_id stack amount_stocked amount_drawn amount_dropped amount_left';
 const BUCKET_STACK_COLS = 'bucket_id stack units_stocked units_left distinct_tokens';
+const BUCKET_DRAW_COLS = 'bucket_id buyer token_id stack draw_index indexer_tx_hash indexer_ts';
+const ACTIVITY_COLS =
+	'kind actor nft_contract token_id price payment_token count indexer_tx_hash indexer_block_height indexer_ts';
 /**
  * A bucket may hold up to 512 entries, but the indexer's Hasura role caps EVERY
  * response at 100 rows and silently ignores a larger `limit`. Asking for 100 is
@@ -291,6 +324,19 @@ const BUCKET_STACK_COLS = 'bucket_id stack units_stocked units_left distinct_tok
  * does not need yet since it renders odds from what it can see.
  */
 const MAX_BUCKET_ENTRY_ROWS = 100;
+
+/**
+ * The row ceiling Hasura enforces on every view. A result of exactly this
+ * length is indistinguishable from a truncated one, so anything that renders
+ * a list has to be able to SAY it may be incomplete rather than quietly
+ * presenting a page as the whole market.
+ */
+export const INDEXER_ROW_CAP = 100;
+
+/** Did this result come back at the ceiling — i.e. is there probably more? */
+export function looksTruncated(rows: { length: number }, limit = INDEXER_ROW_CAP): boolean {
+	return rows.length >= Math.min(limit, INDEXER_ROW_CAP);
+}
 const SWAP_COLS = 'swap_id proposer offered_nft wanted_nft active';
 const RENTAL_COLS = 'rental_id owner nft_contract token_id renter end_block active';
 const MINT_SPOT_COLS = 'listing_id lister nft_contract token_id max_spots sold active indexer_block_height indexer_ts';
@@ -404,6 +450,33 @@ function mapBucketEntry(r: BucketEntryRow): BucketEntry {
 		amountDrawn: num(r.amount_drawn),
 		amountDropped: num(r.amount_dropped),
 		amountLeft: num(r.amount_left)
+	};
+}
+
+function mapBucketDraw(r: BucketDrawRow): BucketDraw {
+	return {
+		bucketId: num(r.bucket_id),
+		buyer: str(r.buyer),
+		tokenId: str(r.token_id),
+		stack: num(r.stack),
+		drawIndex: num(r.draw_index),
+		txId: r.indexer_tx_hash ? str(r.indexer_tx_hash) : undefined,
+		at: r.indexer_ts ? str(r.indexer_ts) : undefined
+	};
+}
+
+function mapActivity(r: ActivityRow): ActivityEvent {
+	return {
+		kind: str(r.kind) as ActivityKind,
+		actor: str(r.actor),
+		nftContract: r.nft_contract ? str(r.nft_contract) : undefined,
+		tokenId: r.token_id ? str(r.token_id) : undefined,
+		price: r.price != null ? str(r.price) : undefined,
+		paymentToken: r.payment_token ? str(r.payment_token) : undefined,
+		count: r.count != null ? num(r.count) : undefined,
+		txId: r.indexer_tx_hash ? str(r.indexer_tx_hash) : undefined,
+		blockHeight: r.indexer_block_height != null ? num(r.indexer_block_height) : undefined,
+		at: r.indexer_ts ? str(r.indexer_ts) : undefined
 	};
 }
 
@@ -734,6 +807,37 @@ export function createMarketProvider(
 				16,
 				mapBucketStack
 			),
+		/**
+		 * The NFTs a purchase actually produced, in the order the contract
+		 * drew them. Filtered by tx so a pack reveal shows exactly what THIS
+		 * purchase yielded — the buyer may own others from earlier draws.
+		 */
+		getBucketDraws: (f: { txId?: string; buyer?: string; bucketId?: number; limit?: number } = {}) => {
+			const where: Record<string, unknown> = {};
+			if (f.txId) where.indexer_tx_hash = { _eq: f.txId };
+			if (f.buyer) where.buyer = { _eq: f.buyer };
+			if (f.bucketId != null) where.bucket_id = { _eq: f.bucketId };
+			return indexerListUnordered<BucketDrawRow, BucketDraw>(
+				'magi_market_bucket_draw_events',
+				BUCKET_DRAW_COLS,
+				where,
+				f.limit ?? 64,
+				mapBucketDraw
+			);
+		},
+		/** Completed purchases, newest first. */
+		getActivity: (f: { account?: string; nftContract?: string; limit?: number } = {}) => {
+			const where: Record<string, unknown> = {};
+			if (f.account) where.actor = { _eq: f.account };
+			if (f.nftContract) where.nft_contract = { _eq: f.nftContract };
+			return indexerList<ActivityRow, ActivityEvent>(
+				'magi_market_activity',
+				ACTIVITY_COLS,
+				where,
+				f.limit ?? 40,
+				mapActivity
+			);
+		},
 		getBundles: (f = {}) =>
 			indexerList<BundleRow, BundleListing>(
 				'magi_market_bundles',

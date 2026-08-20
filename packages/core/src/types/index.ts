@@ -376,3 +376,45 @@ export interface MarketInfo {
 	feeRecipient: string;
 	paused: boolean;
 }
+
+/** One NFT the contract picked and delivered — the row a pack reveal reads. */
+export interface BucketDraw {
+	bucketId: number;
+	buyer: string;
+	tokenId: string;
+	/** Which stack it came out of. */
+	stack: number;
+	/** Position within the purchase, so a pack reveals in the drawn order. */
+	drawIndex: number;
+	txId?: string;
+	at?: string;
+}
+
+/** What kind of thing happened, for the activity feed. */
+export type ActivityKind =
+	| 'bought'
+	| 'swept'
+	| 'bundleBought'
+	| 'bucketPurchase'
+	| 'mintSpotBought';
+
+/**
+ * One thing that happened on the market, normalised across event tables so a
+ * single feed can render them. Deliberately shallow: the feed shows who, what,
+ * how much and when, and links out for anything deeper.
+ */
+export interface ActivityEvent {
+	kind: ActivityKind;
+	/** Buyer for every kind currently mapped. */
+	actor: string;
+	nftContract?: string;
+	tokenId?: string;
+	/** Micro-units; absent when the event does not carry a price. */
+	price?: string;
+	paymentToken?: string;
+	/** Item count — units bought, listings swept, NFTs in a bundle. */
+	count?: number;
+	txId?: string;
+	at?: string;
+	blockHeight?: number;
+}

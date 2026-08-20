@@ -117,6 +117,9 @@ export type {
 	BucketListing,
 	BucketEntry,
 	BucketStack,
+	BucketDraw,
+	ActivityEvent,
+	ActivityKind,
 	SwapProposal,
 	RentalListing,
 	MintSpotListing,
@@ -143,7 +146,7 @@ export type {
 	PrepareDeployResponse,
 	CreateDeployerClientOptions
 } from './deployer.js';
-export { createMarketProvider } from './marketProvider.js';
+export { createMarketProvider, INDEXER_ROW_CAP, looksTruncated } from './marketProvider.js';
 export type { MarketProvider } from './marketProvider.js';
 
 /**

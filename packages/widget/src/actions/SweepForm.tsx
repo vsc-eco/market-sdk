@@ -197,7 +197,7 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 	return (
 		<Modal
 			title="Sweep collection"
-			subtitle="Buy the cheapest listings up to a budget — single tx, slippage-capped on-chain."
+			subtitle="Buy the cheapest SINGLE listings up to a budget — one tx, slippage-capped on-chain. Bundles, packs and mint spots are bought individually."
 			onClose={onClose}
 		>
 			{txId ? (

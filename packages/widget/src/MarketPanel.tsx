@@ -11,6 +11,7 @@ import {
 	type MagiConfig,
 	type MarketClient,
 	type MintSpotListing,
+	type ActivityEvent,
 	type Offer,
 	type RentalListing,
 	type SwapProposal,
@@ -26,6 +27,8 @@ import { SweepForm } from './actions/SweepForm.js';
 import { BuyBundleForm } from './actions/BuyBundleForm.js';
 import { BundleCard } from './actions/BundleCard.js';
 import { BucketCard } from './actions/BucketCard.js';
+import { BuyTile, type BuyItem, type BuyKind } from './actions/BuyTile.js';
+import { DrawReveal } from './actions/DrawReveal.js';
 import { ListBucketForm } from './actions/ListBucketForm.js';
 import { ListBundleForm } from './actions/ListBundleForm.js';
 import { AcceptSwapForm } from './actions/AcceptSwapForm.js';
@@ -40,8 +43,10 @@ import { BuyTokenForm } from './actions/BuyTokenForm.js';
 import { MakeBidForm } from './actions/MakeBidForm.js';
 import { useTokenMeta } from './components/useTokenMeta.js';
 import { useCollectionMeta } from './components/useCollectionMeta.js';
+import { looksTruncated } from '@vsc.eco/market-sdk';
 import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
+import { ActivityFeed } from './components/ActivityFeed.js';
 import { Spinner } from './components/Spinner.js';
 import { PanelSurface } from './components/PanelSurface.js';
 import { PanelView } from './components/PanelView.js';
@@ -171,40 +176,11 @@ const NATIVE_TOKENS = new Set(['hive', 'hbd']);
 type Tab = 'buy' | 'offers' | 'auctions' | 'tokens' | 'swaps' | 'rentals';
 
 /**
- * What a buy-now item gets you. Singles, bundles, random packs and mint spots
- * were four tabs; they are one tab now because they are the same interaction —
- * a fixed price and a Buy button — and differ only in what arrives. That
- * difference is a badge on the tile, not a tab of its own. Auctions (bidding),
- * rentals (time-bound), offers (buy-side) and tokens (fungible) stayed
- * separate: those are genuinely different things to do.
+ * Singles, bundles, random packs and mint spots were four tabs; they are one
+ * tab now because they are the same interaction — a fixed price and a Buy
+ * button — and differ only in what arrives. The item shape and the tile that
+ * renders it live in actions/BuyTile.tsx.
  */
-type BuyKind = 'single' | 'bundle' | 'random' | 'mint';
-
-/** One buyable thing, whatever its format, ready to render as a tile. */
-interface BuyItem {
-	key: string;
-	kind: BuyKind;
-	nftContract: string;
-	seller: string;
-	/** The token whose image represents this item; buckets have none. */
-	tokenId?: string;
-	paymentToken: string;
-	/** Micro-units, for the price line and for sorting within a collection. */
-	price: string;
-	/** When the indexer first saw it — feeds the date filter. */
-	indexedAt?: string;
-	listing?: Listing;
-	bundle?: BundleListing;
-	bucket?: BucketListing;
-	mintSpot?: MintSpotListing;
-}
-
-const BUY_KIND_LABEL: Record<BuyKind, string> = {
-	single: 'Single',
-	bundle: 'Bundle',
-	random: 'Random',
-	mint: 'Mint'
-};
 
 /**
  * Top-level section, one level ABOVE the market tabs. "Market" is every
@@ -212,7 +188,7 @@ const BUY_KIND_LABEL: Record<BuyKind, string> = {
  * population, listed or not. Explore isn't a market view, so it sits beside
  * the panel header rather than inside the tab strip.
  */
-type Section = 'market' | 'explore';
+type Section = 'market' | 'explore' | 'activity';
 
 const EXPLORE_HELP =
 	'Every NFT on the network and who currently holds it, grouped by collection and then by mint template — including tokens nobody has listed for sale. Make an offer on anything you see to ask its holder to sell, or list one of your own.';
@@ -249,6 +225,9 @@ type Sheet =
 	// Narrow panels get one "Create" entry point instead of five toolbar
 	// buttons; this is the chooser behind it.
 	| { kind: 'create' }
+	// What a draw produced. The tx is the key: it is what ties the reveal to
+	// THIS purchase rather than to everything the buyer has ever pulled.
+	| { kind: 'reveal'; bucket: BucketListing; txId: string }
 	| { kind: 'bundleDetail'; bundle: BundleListing }
 	| { kind: 'bucketDetail'; bucket: BucketListing }
 	| { kind: 'proposeSwap' }
@@ -403,6 +382,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const [offers, setOffers] = useState<Offer[]>([]);
 	const [auctions, setAuctions] = useState<Auction[]>([]);
 	const [mintSpots, setMintSpots] = useState<MintSpotListing[]>([]);
+	const [activity, setActivity] = useState<ActivityEvent[]>([]);
+	/** Which buy-now sources came back at the row ceiling. */
+	const [truncated, setTruncated] = useState<string[]>([]);
 	const [tokenListings, setTokenListings] = useState<TokenListing[]>([]);
 	const [bundles, setBundles] = useState<BundleListing[]>([]);
 	const [buckets, setBuckets] = useState<BucketListing[]>([]);
@@ -628,6 +610,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		setLoading(true);
 		setErr(null);
 		try {
+			if (section === 'activity') {
+				setActivity(
+					await client.provider.getActivity(
+						viewAccount ? { account: viewAccount, limit: 60 } : { limit: 60 }
+					)
+				);
+				return;
+			}
 			if (tab === 'buy') {
 				// Four sources, one tab. Fetched together rather than in
 				// sequence: they are independent, and four round-trips one
@@ -646,6 +636,21 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				setBundles(bn);
 				setBuckets(bk);
 				setMintSpots(ms);
+				// Hasura caps every response at 100 rows and ignores a larger
+				// limit, so a full page is indistinguishable from "there is
+				// more". Say so rather than presenting a page as the market.
+				setTruncated(
+					[ls, bn, bk, ms]
+						.map((rows, i) => (looksTruncated(rows) ? ['listings', 'bundles', 'buckets', 'mint spots'][i] : null))
+						.filter((x): x is string => x !== null)
+				);
+				// Recent sales drive the "sold today" badge on each collection
+				// header. Fire-and-forget: a marketplace that cannot show its
+				// heat is still a working marketplace.
+				void client.provider
+					.getActivity({ limit: 100 })
+					.then(setActivity)
+					.catch(() => undefined);
 			} else if (tab === 'offers')
 				setOffers(
 					await client.provider.getOffers(
@@ -681,7 +686,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		} finally {
 			setLoading(false);
 		}
-	}, [client, tab, viewAccount]);
+	}, [client, tab, section, viewAccount]);
 
 	useEffect(() => {
 		void load();
@@ -1024,17 +1029,45 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	 * at all — in one shared grid that would show as a price filter that
 	 * quietly skipped two of the four formats.
 	 */
-	const filteredBuyItems = useMemo(
-		() =>
-			buyItems.filter((it) =>
-				matchesFilters('listing', {
+	const filteredBuyItems = useMemo(() => {
+		const q = exploreQuery.trim().toLowerCase();
+		return buyItems.filter((it) => {
+			if (
+				!matchesFilters('listing', {
 					paymentToken: it.paymentToken,
 					indexedAt: it.indexedAt,
 					pricePerUnit: it.price
 				})
-			),
-		[buyItems, matchesFilters]
-	);
+			)
+				return false;
+			if (!q) return true;
+			// Collection name first: it is what the groups are keyed on, so it
+			// is what someone types when they want to get somewhere.
+			return (
+				collMeta.name(it.nftContract).toLowerCase().includes(q) ||
+				it.nftContract.toLowerCase().includes(q) ||
+				(it.tokenId ?? '').toLowerCase().includes(q) ||
+				it.seller.toLowerCase().includes(q)
+			);
+		});
+	}, [buyItems, matchesFilters, exploreQuery, collMeta]);
+
+	/**
+	 * Sales per collection in the last day. A collection selling steadily and
+	 * one that has never sold anything look identical without it, and that is
+	 * the single most useful thing a browser can tell a buyer.
+	 */
+	const soldToday = useMemo(() => {
+		const cutoff = Date.now() - 86_400_000;
+		const m = new Map<string, number>();
+		for (const e of activity) {
+			if (!e.nftContract || !e.at) continue;
+			const t = new Date(e.at.endsWith('Z') ? e.at : `${e.at}Z`).getTime();
+			if (!Number.isFinite(t) || t < cutoff) continue;
+			m.set(e.nftContract, (m.get(e.nftContract) ?? 0) + 1);
+		}
+		return m;
+	}, [activity]);
 
 	/** Per-format counts for the chip row — shown so an empty format is
 	 *  visible as empty rather than as a chip that silently yields nothing. */
@@ -1108,7 +1141,10 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				});
 				txId = txIds[txIds.length - 1];
 			}
-			void txId;
+			// The tx id used to be dropped here, which is why a draw had no
+			// payoff: you paid and the grid just refreshed. Hand it to the
+			// reveal instead.
+			if (txId) setSheet({ kind: 'reveal', bucket: b, txId });
 			void load();
 		} catch (e) {
 			setErr(e instanceof Error ? e.message : String(e));
@@ -1182,166 +1218,6 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		} finally {
 			setCanceling(null);
 		}
-	}
-
-	/**
-	 * One buy-now tile, whatever its format.
-	 *
-	 * A plain function, deliberately not a component: declaring a component
-	 * inside a render makes a new type on every pass, which remounts the whole
-	 * subtree and restarts any fetch inside it.
-	 */
-	function buyTile(it: BuyItem) {
-		const mine = isSelf(it.seller);
-		const sym = tokenMeta.symbol(it.paymentToken);
-		const common = {
-			key: it.key,
-			badge: BUY_KIND_LABEL[it.kind],
-			badgeTone: it.kind === 'single' ? undefined : (it.kind as 'bundle' | 'random' | 'mint'),
-			imageUrl: it.tokenId ? nftImages.get(it.nftContract, it.tokenId) : null,
-			tokenId: it.tokenId ?? ''
-		};
-
-		if (it.kind === 'single' && it.listing) {
-			const l = it.listing;
-			const expSecs = l.expirationBlock ? chainClock.secondsUntilBlock(l.expirationBlock) : null;
-			const expDate = l.expirationBlock ? chainClock.blockToDate(l.expirationBlock) : null;
-			const expired = expSecs != null && expSecs <= 0;
-			return (
-				<MarketTile
-					{...common}
-					subtitle={
-						l.expirationBlock ? (
-							<span className={`magi-market-tile-expiry${expired ? ' expired' : ''}`}>
-								{expired
-									? 'expired'
-									: expSecs != null
-										? `expires in ${formatCountdown(expSecs)}`
-										: expDate
-											? `expires ${formatGermanDateTime(expDate)}`
-											: `expires block ${l.expirationBlock}`}
-							</span>
-						) : undefined
-					}
-					price={<>{tokenMeta.format(l.paymentToken, l.pricePerUnit)} {sym} · ×{l.amount}</>}
-					onOpen={() => setSheet({ kind: 'nftDetails', nftContract: l.nftContract, tokenId: l.tokenId })}
-					actions={
-						mine ? (
-							<>
-								<button type="button" className="magi-market-submit ghost" disabled={!username}
-									onClick={() => setSheet({ kind: 'updateListing', listing: l })}>Edit</button>
-								<button type="button" className="magi-market-submit ghost"
-									disabled={canceling === `listing:${l.listingId}`}
-									onClick={() => cancelListing('listing', l.listingId)}>
-									{canceling === `listing:${l.listingId}` ? 'Cancelling…' : 'Cancel'}
-								</button>
-							</>
-						) : (
-							<>
-								<button type="button" className="magi-market-submit" disabled={!username}
-									onClick={() => setSheet({ kind: 'buy', listing: l })}>Buy</button>
-								<button type="button" className="magi-market-submit ghost" disabled={!username}
-									onClick={() => setSheet({ kind: 'offer', listing: l })}>Offer</button>
-							</>
-						)
-					}
-				/>
-			);
-		}
-
-		if (it.kind === 'bundle' && it.bundle) {
-			const b = it.bundle;
-			const units = b.items.reduce((n, i) => n + i.amount, 0);
-			return (
-				<MarketTile
-					{...common}
-					label={`Bundle #${b.bundleId}`}
-					subtitle={<>{b.items.length} NFTs{units !== b.items.length ? ` (${units} units)` : ''} · one lot</>}
-					price={<>{tokenMeta.format(b.paymentToken, b.price)} {sym}</>}
-					// The tile opens the bundle, not one NFT inside it — which
-					// item you happen to see is an implementation detail of the
-					// thumbnail.
-					onOpen={() => setSheet({ kind: 'bundleDetail', bundle: b })}
-					actions={
-						mine ? (
-							<button type="button" className="magi-market-submit ghost"
-								disabled={canceling === `bundle:${b.bundleId}`}
-								onClick={() => cancelListing('bundle', b.bundleId)}>
-								{canceling === `bundle:${b.bundleId}` ? 'Cancelling…' : 'Cancel'}
-							</button>
-						) : (
-							<>
-								<button type="button" className="magi-market-submit" disabled={!username}
-									onClick={() => setSheet({ kind: 'buyBundle', bundle: b })}>Buy</button>
-								<button type="button" className="magi-market-submit ghost"
-									onClick={() => setSheet({ kind: 'bundleDetail', bundle: b })}>Contents</button>
-							</>
-						)
-					}
-				/>
-			);
-		}
-
-		if (it.kind === 'random' && it.bucket) {
-			const b = it.bucket;
-			const singles = b.pricePerDraw !== '0' && b.pricePerDraw !== '';
-			return (
-				<MarketTile
-					{...common}
-					// No thumbnail on purpose: showing one card from a random
-					// draw would read as the card you get.
-					imageUrl={null}
-					label={`Bucket #${b.bucketId}`}
-					subtitle={<>{b.unitsStocked} left{b.packSize > 0 ? ` · packs of ${b.packSize}` : ''}</>}
-					price={<>{tokenMeta.format(b.paymentToken, it.price)} {sym}<span className="magi-market-tile-per">{singles ? '/draw' : '/pack'}</span></>}
-					onOpen={() => setSheet({ kind: 'bucketDetail', bucket: b })}
-					actions={
-						mine ? (
-							<button type="button" className="magi-market-submit ghost"
-								disabled={canceling === `bucket:${b.bucketId}`}
-								onClick={() => cancelListing('bucket', b.bucketId)}>
-								{canceling === `bucket:${b.bucketId}` ? 'Cancelling…' : 'Cancel'}
-							</button>
-						) : (
-							<>
-								<button type="button" className="magi-market-submit"
-									disabled={!username || drawing === b.bucketId || b.unitsStocked === 0}
-									onClick={() => drawFromBucket(b, singles ? 'single' : 'pack')}>
-									{drawing === b.bucketId ? 'Drawing…' : singles ? 'Draw' : 'Pack'}
-								</button>
-								<button type="button" className="magi-market-submit ghost"
-									onClick={() => setSheet({ kind: 'bucketDetail', bucket: b })}>Odds</button>
-							</>
-						)
-					}
-				/>
-			);
-		}
-
-		if (it.kind === 'mint' && it.mintSpot) {
-			const m = it.mintSpot;
-			return (
-				<MarketTile
-					{...common}
-					subtitle={<>{m.sold}/{m.maxSpots || '∞'} sold</>}
-					price={<>{tokenMeta.format(m.paymentToken, m.pricePerSpot)} {sym}</>}
-					onOpen={() => setSheet({ kind: 'nftDetails', nftContract: m.nftContract, tokenId: m.tokenId })}
-					actions={
-						mine ? (
-							<button type="button" className="magi-market-submit ghost"
-								disabled={canceling === `mintspots:${m.listingId}`}
-								onClick={() => cancelListing('mintspots', m.listingId)}>
-								{canceling === `mintspots:${m.listingId}` ? 'Cancelling…' : 'Cancel'}
-							</button>
-						) : (
-							<button type="button" className="magi-market-submit" disabled={!username}
-								onClick={() => setSheet({ kind: 'buyMintSpot', listing: m })}>Mint</button>
-						)
-					}
-				/>
-			);
-		}
-		return null;
 	}
 
 	const TABS: Array<{ id: Tab; label: string }> = [
@@ -1465,7 +1341,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							{ label: 'Create bundle', hint: 'Several NFTs as one all-or-nothing lot.', go: () => setSheet({ kind: 'listBundle' as const }) },
 							{ label: 'Open a bucket', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
 							{ label: 'Sell mint spots', hint: 'The right to mint a fresh edition.', go: () => setSheet({ kind: 'mintspots' as const }) },
-							{ label: 'Sweep', hint: 'Buy the cheapest listings of one collection at once.', go: () => setSheet({ kind: 'sweep' as const }) }
+							{
+								label: 'Sweep',
+								hint: 'Buy the cheapest single listings of one collection at once.',
+								go: () => {
+									setBuyKind('single');
+									setSheet({ kind: 'sweep' as const });
+								}
+							}
 						].map((o) => (
 							<button key={o.label} type="button" className="magi-market-createrow" onClick={o.go}>
 								<span className="magi-market-createrow-label">{o.label}</span>
@@ -1474,6 +1357,27 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						))}
 					</div>
 				</Modal>
+			)}
+			{sheet?.kind === 'reveal' && (
+				<PanelView
+					title="You pulled"
+					subtitle={`Bucket #${sheet.bucket.bucketId} · ${collMeta.name(sheet.bucket.nftContract)}`}
+					onBack={() => setSheet(null)}
+					confirmOnLeave={false}
+				>
+					<DrawReveal
+						client={client}
+						bucket={sheet.bucket}
+						txId={sheet.txId}
+						// A stack a pack always draws from is the one people buy
+						// the pack for, so those pulls get called out.
+						rareStacks={(sheet.bucket.packDraws ?? [])
+							.map((n, i) => (n > 0 && i > 0 ? i : -1))
+							.filter((i) => i >= 0)}
+						onClose={() => setSheet(null)}
+						onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+					/>
+				</PanelView>
 			)}
 			{sheet?.kind === 'bundleDetail' && (
 				<PanelView
@@ -1551,7 +1455,29 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				/>
 			)}
 
-			{!view && !sheet && (
+			{!view && !sheet && section === 'activity' && (
+				<>
+					<p className="magi-market-subtitle" style={{ marginBottom: '0.7rem' }}>
+						{viewAccount ? `What ${viewAccount.replace(/^hive:/, '')} has been buying` : 'What has been selling'}
+					</p>
+					{loading ? (
+						<div className="magi-market-state"><Spinner /></div>
+					) : (
+						<ActivityFeed
+							events={activity}
+							me={me}
+							collectionName={collMeta.name}
+							formatPrice={(token, micro) =>
+								token && micro ? `${tokenMeta.format(token, micro)} ${tokenMeta.symbol(token)}` : null
+							}
+							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+							emptyLabel="Nothing has sold yet."
+						/>
+					)}
+				</>
+			)}
+
+			{!view && !sheet && section !== 'activity' && (
 				<>
 				{/* Top-level section switch, one level ABOVE the market tabs and at
 				    the same level as the header — Explore isn't an order-book view,
@@ -1559,7 +1485,8 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				<div className="magi-market-sections" role="tablist" aria-label="Panel section">
 					{([
 						{ id: 'market' as Section, label: 'Market' },
-						{ id: 'explore' as Section, label: 'Explore' }
+						{ id: 'explore' as Section, label: 'Explore' },
+						{ id: 'activity' as Section, label: 'Activity' }
 					]).map((s) => (
 						<button
 							key={s.id}
@@ -1591,7 +1518,11 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					</div>
 				)}
 
-				{section === 'explore' && (
+				{/* One search box for both sections. It used to be Explore-only,
+				    which was survivable when Market was eight narrow tabs — now
+				    that Buy now groups by collection, "which collection" IS the
+				    navigation and there was no way to ask for one. */}
+				{(section === 'explore' || (section === 'market' && tab === 'buy')) && (
 					<div className="magi-market-search">
 						<svg className="magi-market-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
 							<circle cx="11" cy="11" r="8" />
@@ -1600,8 +1531,12 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						<input
 							value={exploreQuery}
 							onChange={(e) => setExploreQuery((e.target as HTMLInputElement).value)}
-							placeholder="Search NFTs by id, holder, collection or template…"
-							aria-label="Search NFTs"
+							placeholder={
+								section === 'explore'
+									? 'Search NFTs by id, holder, collection or template…'
+									: 'Search by collection or NFT id…'
+							}
+							aria-label="Search"
 							autoComplete="off"
 							spellCheck={false}
 						/>
@@ -1626,7 +1561,18 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 									<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} style={{ marginLeft: '0.5rem' }} />
 									<ToolbarAction label="Open a bucket" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
 									<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} style={{ marginLeft: '0.5rem' }} />
-									<ToolbarAction label="Sweep" onClick={() => setSheet({ kind: 'sweep' })} style={{ marginLeft: '0.5rem' }} />
+									<ToolbarAction
+										label="Sweep"
+										// Sweep only handles single listings. Selecting that chip
+										// first makes the tab show exactly what the form can act
+										// on, instead of a mixed grid three-quarters of which it
+										// silently ignores.
+										onClick={() => {
+											setBuyKind('single');
+											setSheet({ kind: 'sweep' });
+										}}
+										style={{ marginLeft: '0.5rem' }}
+									/>
 								</>
 							)
 						)}
@@ -1736,6 +1682,12 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						))}
 					</div>
 
+					{truncated.length > 0 && (
+						<p className="magi-market-field-hint magi-market-truncated">
+							Showing the first 100 {truncated.join(', ')} — there may be more than fits one page.
+						</p>
+					)}
+
 					{buyGroups.length === 0 ? (
 						<div className="magi-market-state">
 							{scope === 'yours'
@@ -1749,9 +1701,35 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 								collectionName={collMeta.name(g.contractId)}
 								owner={collMeta.owner(g.contractId)}
 								count={g.items.length}
-								action={ownerGear(g.contractId)}
+								action={
+									<>
+										{(soldToday.get(g.contractId) ?? 0) > 0 && (
+											<span className="magi-market-heat">
+												{soldToday.get(g.contractId)} sold today
+											</span>
+										)}
+										{ownerGear(g.contractId)}
+									</>
+								}
 							>
-								{g.items.map((it) => buyTile(it))}
+								{g.items.map((it) => (
+									<BuyTile
+										key={it.key}
+										item={it}
+										username={username}
+										isSelf={isSelf}
+										tokenMeta={tokenMeta}
+										nftImages={nftImages}
+										chainClock={chainClock}
+										formatCountdown={formatCountdown}
+										formatDateTime={formatGermanDateTime}
+										canceling={canceling}
+										drawing={drawing}
+										onSheet={setSheet}
+										onCancel={cancelListing}
+										onDraw={drawFromBucket}
+									/>
+								))}
 							</CollectionGroup>
 						))
 					)}
