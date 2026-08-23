@@ -76,7 +76,7 @@ export function AddToBucketForm({
 
 	return (
 		<Modal
-			title={`Add to mystery sale #${bucket.bucketId}`}
+			title={`Add to ${bucket.name?.trim() || `mystery sale #${bucket.bucketId}`}`}
 			subtitle={`${bucket.entryCount} entries in so far · ${bucket.unitsStocked} units left to draw`}
 			onClose={onClose}
 		>

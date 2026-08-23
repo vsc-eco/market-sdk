@@ -1516,7 +1516,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			)}
 			{sheet?.kind === 'bucketDetail' && (
 				<PanelView
-					title={`Mystery sale #${sheet.bucket.bucketId}`}
+					title={sheet.bucket.name?.trim() || `Mystery sale #${sheet.bucket.bucketId}`}
 					subtitle={`Random draw from ${collMeta.name(sheet.bucket.nftContract)} — every stack and its odds`}
 					onBack={() => setSheet(null)}
 					confirmOnLeave={false}

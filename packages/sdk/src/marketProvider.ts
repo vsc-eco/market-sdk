@@ -185,6 +185,7 @@ interface BundleRow {
 
 interface BucketRow {
 	bucket_id: unknown;
+	name?: unknown;
 	seller: string;
 	nft_contract: string;
 	payment_token: string;
@@ -308,7 +309,7 @@ const AUCTION_COLS =
 	'auction_id seller nft_contract token_id amount auction_type start_price end_price start_block end_block high_bidder high_bid settled active indexer_block_height indexer_ts';
 const BUNDLE_COLS = 'bundle_id seller nft_contract count price active';
 const BUCKET_COLS =
-	'bucket_id seller nft_contract payment_token price_per_draw price_per_pack pack_draws ' +
+	'bucket_id name seller nft_contract payment_token price_per_draw price_per_pack pack_draws ' +
 	'expiration_block fee_bps royalty_bps royalty_recipient entry_count units_stocked units_left ' +
 	'units_left_reported units_drawn units_dropped purchases sold_out delisted active ' +
 	'indexer_block_height indexer_ts';
@@ -417,6 +418,7 @@ function mapBucket(r: BucketRow): BucketListing {
 	const packDraws = parsePackDraws(r.pack_draws);
 	return {
 		bucketId: num(r.bucket_id),
+		name: r.name ? str(r.name) : undefined,
 		seller: r.seller,
 		nftContract: r.nft_contract,
 		paymentToken: r.payment_token,

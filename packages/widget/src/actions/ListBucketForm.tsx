@@ -84,6 +84,7 @@ export function ListBucketForm({
 	const tokenMeta = useTokenMeta(client.config);
 
 	const [step, setStep] = useState(0);
+	const [name, setName] = useState('');
 	const [sellSingles, setSellSingles] = useState(true);
 	const [sellPacks, setSellPacks] = useState(false);
 	/** Pending sale-type change that would throw work away, awaiting a yes. */
@@ -221,6 +222,7 @@ export function ListBucketForm({
 				nftContract,
 				entries,
 				paymentToken: paymentToken.trim(),
+				name: name.trim(),
 				pricePerDraw: sellSingles ? microDraw : '0',
 				pricePerPack: sellPacks ? microPack : '0',
 				packDraws,
@@ -272,6 +274,18 @@ export function ListBucketForm({
 					<div className="magi-market-bucketform">
 
 					{step === 0 && (
+						<>
+						<Field
+							label="Name"
+							hint="What buyers see — “Base Set Booster”, not “#0”. Optional; up to 64 characters."
+						>
+							<TextInput
+								value={name}
+								onChange={(v) => setName(v.slice(0, 64))}
+								placeholder="Base Set Booster"
+								disabled={submitting}
+							/>
+						</Field>
 						<Field
 							label="How can people buy?"
 							hint="Both can run at once — the same stock, sold two ways."
@@ -326,6 +340,7 @@ export function ListBucketForm({
 								</button>
 							</div>
 						</Field>
+						</>
 					)}
 
 					{step === 1 && (

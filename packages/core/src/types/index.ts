@@ -226,6 +226,8 @@ export interface Auction extends Indexed {
  */
 export interface BucketListing {
 	bucketId: number;
+	/** The seller's name for the sale; empty for one listed before names existed. */
+	name?: string;
 	seller: string;
 	nftContract: string;
 	paymentToken: string;

@@ -586,6 +586,8 @@ export const MAX_BUCKET_ENTRIES_PER_CALL = 24;
 export const MAX_BUCKET_ENTRIES = 512;
 
 export interface ListBucketParams {
+	/** Display name, up to 64 bytes. The contract never reads it. */
+	name?: string;
 	nftContract: string;
 	entries: BucketEntryParam[];
 	paymentToken: string;
@@ -642,6 +644,7 @@ export function buildListBucket(ctx: MarketOpContext, p: ListBucketParams): Mark
 	}
 	if (packDraws.some((d) => d < 0)) throw new Error('listBucket: packDraws cannot be negative');
 	return bundle(ctx, 'listBucket', {
+		name: p.name ?? '',
 		nftContract: p.nftContract,
 		entries: p.entries.map((e) => ({ tokenId: e.tokenId, amount: e.amount, stack: e.stack ?? 0 })),
 		paymentToken: p.paymentToken,
