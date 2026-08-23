@@ -2659,3 +2659,8 @@
 	padding: 0;
 	margin-bottom: 0;
 }
+
+/* The entry-limit line, once the number typed exceeds what will fit. */
+.magi-market-cap-hit {
+	color: #f2c14a;
+}

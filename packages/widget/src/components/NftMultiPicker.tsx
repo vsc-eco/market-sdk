@@ -410,23 +410,42 @@ export function NftMultiPicker({
 	 * Spread `n` units across a group's tokens, filling each to its balance
 	 * before moving on. One entry per token is what the contract stores, so
 	 * the group is purely how the seller thinks about it.
+	 *
+	 * `max` counts ENTRIES, not units: 25 units of a template whose editions
+	 * hold one each needs 25 entries, and a sale holds 24. This used to
+	 * return silently in that case while the dialog closed anyway, so Add
+	 * looked like it did nothing. Nothing is refused here now — the caller
+	 * clamps the request to `addableUnits` first, so the ceiling is visible
+	 * before it is hit.
 	 */
 	function applyGroupAmount(g: EditionGroup, n: number) {
 		const without = value.filter(
 			(v) => !g.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
 		);
+		const budget = max != null ? max - without.length : Infinity;
 		const added: NftMultiPick[] = [];
 		let left = Math.max(0, Math.min(n, g.available));
 		for (const t of g.tokens) {
-			if (left <= 0) break;
+			if (left <= 0 || added.length >= budget) break;
 			const take = Math.min(left, t.balance);
 			added.push({ nftContract: t.contractId, tokenId: t.tokenId, amount: take });
 			left -= take;
 		}
-		const next = [...without, ...added];
-		// `max` counts ENTRIES, which is what the contract charges for.
-		if (max != null && next.length > max) return;
-		onChange(next);
+		onChange([...without, ...added]);
+	}
+
+	/**
+	 * The most units this group can contribute right now: its own stock,
+	 * capped by how many entries are left once everything else keeps its own.
+	 */
+	function addableUnits(g: EditionGroup): number {
+		const others = value.filter(
+			(v) => !g.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
+		);
+		const budget = max != null ? Math.max(0, max - others.length) : g.tokens.length;
+		let units = 0;
+		for (let i = 0; i < Math.min(budget, g.tokens.length); i++) units += g.tokens[i].balance;
+		return Math.min(units, g.available);
 	}
 
 	function setAmount(k: string, n: number) {
@@ -542,7 +561,14 @@ export function NftMultiPicker({
 					</div>
 				)}
 			</div>
-			{amountFor && (
+			{amountFor && (() => {
+				const cap = addableUnits(amountFor);
+				const usedElsewhere = value.filter(
+					(v) => !amountFor.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
+				).length;
+				const asked = Math.max(0, Math.floor(Number(amountText) || 0));
+				const overCap = asked > cap;
+				return (
 				<div
 					className="magi-market-modal"
 					role="dialog"
@@ -565,34 +591,46 @@ export function NftMultiPicker({
 							className="magi-market-input"
 							type="number"
 							min={0}
-							max={amountFor.available}
+							max={cap}
 							value={amountText}
 							autoFocus
 							onChange={(e) => setAmountText((e.target as HTMLInputElement).value)}
 							onKeyDown={(e) => {
-								if (e.key === 'Enter') {
+								if (e.key === 'Enter' && !overCap) {
 									e.preventDefault();
-									applyGroupAmount(amountFor, Number(amountText) || 0);
+									applyGroupAmount(amountFor, asked);
 									setAmountFor(null);
 								}
 							}}
 						/>
+						{/* The limit counts ENTRIES, and one edition is one entry
+						    however many copies it holds — so say what fits rather
+						    than refusing the number after the fact. */}
+						{cap < amountFor.available && (
+							<p className={`magi-market-field-hint${overCap ? ' magi-market-cap-hit' : ''}`}>
+								Up to {cap} here — a sale holds {max} editions
+								{usedElsewhere > 0 ? ` and ${usedElsewhere} ${usedElsewhere === 1 ? 'is' : 'are'} already used` : ''}.
+								{overCap ? ' Lower the number, or free up space first.' : ''}
+							</p>
+						)}
 						<div className="magi-market-confirm-actions">
 							<button
 								type="button"
 								className="magi-market-submit ghost"
+								disabled={cap === 0}
 								onClick={() => {
-									applyGroupAmount(amountFor, amountFor.available);
+									applyGroupAmount(amountFor, cap);
 									setAmountFor(null);
 								}}
 							>
-								All {amountFor.available}
+								All {cap}
 							</button>
 							<button
 								type="button"
 								className="magi-market-submit"
+								disabled={overCap || cap === 0}
 								onClick={() => {
-									applyGroupAmount(amountFor, Number(amountText) || 0);
+									applyGroupAmount(amountFor, asked);
 									setAmountFor(null);
 								}}
 							>
@@ -601,7 +639,8 @@ export function NftMultiPicker({
 						</div>
 					</div>
 				</div>
-			)}
+				);
+			})()}
 
 			{effectiveLock && (
 				<span className="magi-market-field-hint">
