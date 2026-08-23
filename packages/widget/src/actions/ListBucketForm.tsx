@@ -130,6 +130,26 @@ export function ListBucketForm({
 		const n = Number(t.perPack);
 		return Number.isInteger(n) && n > 0 ? n : 0;
 	};
+	/**
+	 * Why a stack's per-pack number is unusable, or null if it is fine.
+	 *
+	 * A stack drawn 0 times per pack is never drawn AT ALL — the contract
+	 * builds its plan from packDraws, and singles only ever come from stack 0
+	 * — so its NFTs would be escrowed forever. And a stack promising more
+	 * slots than it has units cannot fill a single pack, which the BUYER
+	 * discovers at purchase rather than the seller at listing.
+	 */
+	const stackSlotProblem = (t: Stack): string | null => {
+		const n = Number(t.perPack);
+		if (!Number.isInteger(n) || n < 1)
+			return 'Every stack must appear at least once per pack, or nothing in it can ever be drawn.';
+		const u = units(t);
+		if (u === 0) return 'Nothing picked yet.';
+		if (u < n)
+			return `${n} per pack needs at least ${n} units — this stack has ${u}.`;
+		return null;
+	};
+
 	const totalEntries = stacks.reduce((a, t) => a + t.picks.length, 0);
 	const totalUnits = stacks.reduce((a, t) => a + units(t), 0);
 	const packSize = stacks.reduce((a, t) => a + slots(t), 0);
@@ -157,13 +177,13 @@ export function ListBucketForm({
 			const empty = stacks.findIndex((t) => t.picks.length === 0);
 			if (empty !== -1) return `"${stacks[empty].name}" has no NFTs — fill it or remove the stack.`;
 			if (sellPacks) {
-				if (packSize === 0) return 'A pack needs at least one slot. Set how many cards come from a stack.';
 				if (packSize > 24) return `A pack of ${packSize} exceeds the contract's 24-draw limit.`;
-				// Slots a stack cannot fill = a bucket that lists and then refuses
-				// every purchase, which the buyer discovers rather than the seller.
-				const short = stacks.find((t) => slots(t) > 0 && units(t) < slots(t));
-				if (short)
-					return `"${short.name}" promises ${slots(short)} per pack but only has ${units(short)} unit${units(short) === 1 ? '' : 's'}.`;
+				// One rule, checked here and shown live on the stack itself: a
+				// stack drawn zero times is dead stock, and one that promises
+				// more than it holds refuses every purchase — which the buyer
+				// discovers rather than the seller.
+				const bad = stacks.findIndex((t) => stackSlotProblem(t) !== null);
+				if (bad !== -1) return `"${stacks[bad].name}": ${stackSlotProblem(stacks[bad])}`;
 			}
 			// Single draws always come from the first stack, so it must have stock.
 			if (sellSingles && units(stacks[0]) === 0)
@@ -285,6 +305,15 @@ export function ListBucketForm({
 											setConfirmTypeChange(true);
 											return;
 										}
+										// Turning packs ON: a stack still carrying the
+										// singles-era 0 would be dead the moment packs
+										// exist, so give it a real slot rather than
+										// showing the seller an error they never caused.
+										if (!sellPacks) {
+											setStacks((prev) =>
+												prev.map((t) => (Number(t.perPack) >= 1 ? t : { ...t, perPack: '1' }))
+											);
+										}
 										setSellPacks(!sellPacks);
 									}}
 								>
@@ -342,7 +371,7 @@ export function ListBucketForm({
 													<TextInput
 														type="number"
 														inputMode="numeric"
-														min={0}
+														min={1}
 														value={stack.perPack}
 														onChange={(v) => updateStack(i, { perPack: v })}
 														disabled={submitting}
@@ -364,6 +393,9 @@ export function ListBucketForm({
 												</button>
 											)}
 										</div>
+										)}
+										{open && sellPacks && stackSlotProblem(stack) && (
+											<p className="magi-market-status warn">{stackSlotProblem(stack)}</p>
 										)}
 										{open && (
 											<>
@@ -411,7 +443,7 @@ export function ListBucketForm({
 							)}
 							<p className="magi-market-field-hint">
 								{sellPacks
-									? 'A stack with 0 per pack is still in the bucket — it just is not guaranteed a slot.'
+									? 'Every stack is drawn at least once per pack — a stack drawn zero times could never be drawn at all, since single draws only come from the first stack.'
 									: 'One pile: every draw picks from everything you put here. Stacks — commons, rares, a guaranteed slot — are what packs are for, so turn packs on if you want them.'}
 							</p>
 						</>
