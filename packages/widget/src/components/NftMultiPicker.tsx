@@ -226,7 +226,9 @@ function GroupTile({
 						onError={() => setImgFailed(true)}
 					/>
 				)}
-				{picked && <span className="magi-market-tile-badge">{group.picked} in</span>}
+				{picked && (
+					<span className="magi-market-tile-badge">{many ? `${group.picked} in` : 'in'}</span>
+				)}
 			</div>
 			<div className="magi-market-tile-id" title={group.label}>{group.label}</div>
 			<div className="magi-market-tile-row">
@@ -236,9 +238,12 @@ function GroupTile({
 			</div>
 			{picked && (
 				<div className="magi-market-tile-actions">
-					<button type="button" className="magi-market-submit ghost" onClick={onPick}>
-						Change
-					</button>
+					{/* Nothing to change about a one-of-a-kind: it is in, or it is not. */}
+					{many && (
+						<button type="button" className="magi-market-submit ghost" onClick={onPick}>
+							Change
+						</button>
+					)}
 					<button type="button" className="magi-market-submit ghost" onClick={onClear}>
 						Remove
 					</button>
@@ -565,9 +570,28 @@ export function NftMultiPicker({
 										if (dimmed) return;
 										// Cross-collection: the contract takes one collection
 										// per sale, so choosing another replaces the selection.
-										if (effectiveLock && g.lead.contractId !== effectiveLock) {
-											onChange([]);
+										const crossing = !!effectiveLock && g.lead.contractId !== effectiveLock;
+										// A one-of-a-kind has nothing to ask: the only answer is
+										// one. Asking anyway makes the commonest case — a unique
+										// NFT — the slowest one to pick.
+										if (g.available <= 1) {
+											if (g.picked > 0 && !crossing) {
+												onChange(
+													value.filter(
+														(v) => !g.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
+													)
+												);
+												return;
+											}
+											const base = crossing ? [] : value;
+											if (max != null && base.length >= max) return;
+											onChange([
+												...base,
+												{ nftContract: g.lead.contractId, tokenId: g.lead.tokenId, amount: 1 }
+											]);
+											return;
 										}
+										if (crossing) onChange([]);
 										setAmountText(String(g.picked > 0 ? g.picked : Math.min(1, g.available)));
 										setAmountFor(g);
 									}}
