@@ -140,7 +140,7 @@ export function MakeOfferForm({
 		<Modal title="Make an offer" subtitle="Your payment is escrowed now (at offer time); refunded if you cancel or it expires unaccepted." onClose={onClose}>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : (

@@ -2664,3 +2664,48 @@
 .magi-market-cap-hit {
 	color: #f2c14a;
 }
+
+/* ---- transaction status --------------------------------------------- */
+/* The base receipt is styled as a success. While a tx is still in flight it
+   has not succeeded yet, so it is neutral until the chain says otherwise —
+   a green box reading "Waiting for the network" claims the thing it is
+   waiting for. */
+.magi-market-success.tx-pending,
+.magi-market-success.tx-included,
+.magi-market-success.tx-unknown {
+	border-color: var(--magi-field-border);
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+}
+.magi-market-success.tx-pending .magi-market-success-label,
+.magi-market-success.tx-included .magi-market-success-label {
+	color: var(--magi-text-secondary);
+}
+.magi-market-success.tx-confirmed {
+	border-color: rgba(16, 185, 129, 0.55);
+}
+.magi-market-success.tx-failed {
+	border-color: rgba(239, 68, 68, 0.6);
+}
+.magi-market-success.tx-failed .magi-market-success-label { color: #f87171; }
+.magi-market-success.tx-confirmed .magi-market-success-label { color: #34d399; }
+.magi-market-success.tx-unknown .magi-market-success-label { color: var(--magi-text-secondary); }
+.magi-market-tx-tick { margin-right: 0.35rem; font-weight: 700; }
+/* A spinner rather than a static word, because the wait is real and a line
+   that never changes reads as a UI that has stopped. */
+.magi-market-tx-spin {
+	display: inline-block;
+	width: 0.7rem;
+	height: 0.7rem;
+	margin-right: 0.4rem;
+	vertical-align: -1px;
+	border: 2px solid var(--magi-field-border);
+	border-top-color: var(--magi-accent);
+	border-radius: 50%;
+	animation: magi-market-tx-spin 0.8s linear infinite;
+}
+@keyframes magi-market-tx-spin {
+	to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-tx-spin { animation-duration: 2.4s; }
+}

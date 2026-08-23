@@ -91,7 +91,7 @@ export function ProposeSwapForm({ client, username, onSuccess, onClose }: Propos
 		<Modal title="Propose a swap" subtitle="NFT-for-NFT trade with an optional token top-up." onClose={onClose}>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : (
