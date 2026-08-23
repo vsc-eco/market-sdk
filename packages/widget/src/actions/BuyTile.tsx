@@ -23,7 +23,7 @@ export interface BuyItem {
 export const BUY_KIND_LABEL: Record<BuyKind, string> = {
 	single: 'Single',
 	bundle: 'Bundle',
-	random: 'Random',
+	random: 'Mystery',
 	mint: 'Mint'
 };
 

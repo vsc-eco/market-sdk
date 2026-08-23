@@ -1365,6 +1365,58 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		}
 	}
 
+	/** What the current tab can create, with a line for the chooser sheet. */
+	const toolbarActions = useMemo<Array<{ label: string; hint: string; go: () => void }>>(() => {
+		if (section !== 'market' || !username) return [];
+		switch (tab) {
+			case 'buy':
+				return [
+					{ label: 'Sell an NFT', hint: 'One NFT at a fixed price.', go: () => setSheet({ kind: 'sell' }) },
+					{ label: 'Create bundle', hint: 'Several NFTs as one all-or-nothing lot.', go: () => setSheet({ kind: 'listBundle' }) },
+					{ label: 'Mystery sale', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
+					{ label: 'Sell mint spots', hint: 'The right to mint a fresh edition.', go: () => setSheet({ kind: 'mintspots' }) },
+					{
+						label: 'Sweep',
+						hint: 'Buy the cheapest single listings of one collection at once.',
+						// Sweep only handles single listings, so the tab is narrowed
+						// to what the form can actually act on.
+						go: () => {
+							setBuyKind('single');
+							setSheet({ kind: 'sweep' });
+						}
+					}
+				];
+			case 'offers':
+				return [{ label: 'Make an offer', hint: 'Offer on any NFT, funds escrowed until accepted.', go: () => setSheet({ kind: 'offer' }) }];
+			case 'auctions':
+				return [{ label: 'New auction', hint: 'English or Dutch, on a deadline.', go: () => setSheet({ kind: 'auction' }) }];
+			case 'swaps':
+				return [{ label: 'Propose swap', hint: 'Trade one NFT for another.', go: () => setSheet({ kind: 'proposeSwap' }) }];
+			case 'rentals':
+				return [{ label: 'List for rental', hint: 'Rent an NFT out per block.', go: () => setSheet({ kind: 'listRental' }) }];
+			case 'tokens':
+				return [{ label: 'Sell a token', hint: 'Fungible tokens at a price per unit.', go: () => setSheet({ kind: 'sellToken' }) }];
+			default:
+				return [];
+		}
+	}, [section, username, tab]);
+
+	/**
+	 * Do the action buttons fit beside the Others/Yours pills and the filter
+	 * icons?
+	 *
+	 * Estimated from the count rather than measured, deliberately: measuring
+	 * the rendered row would collapse it, which stops the overflow, which
+	 * un-collapses it. The estimate is generous — a button is well under
+	 * 9.5rem — so it errs toward the chooser, which always fits.
+	 */
+	const actionsFit = useMemo(() => {
+		if (toolbarActions.length === 0) return true;
+		const RESERVED = 250; // Others/Yours pills + filter and help icons
+		const PER_ACTION = 132;
+		return panelWidth >= RESERVED + toolbarActions.length * PER_ACTION;
+	}, [toolbarActions.length, panelWidth]);
+
 	const TABS: Array<{ id: Tab; label: string }> = [
 		{ id: 'buy', label: 'Buy now' },
 		{ id: 'auctions', label: 'Auctions' },
@@ -1475,27 +1527,22 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			)}
 			{sheet?.kind === 'create' && username && (
 				<Modal
-					title="Sell or sweep"
-					subtitle="Every way to put something on the market, or take several off it."
+					title="Actions"
+					subtitle="Everything you can do on this tab."
 					onClose={() => setSheet(null)}
 					confirmOnBackdrop={false}
 				>
 					<div className="magi-market-createlist">
-						{[
-							{ label: 'Sell an NFT', hint: 'One NFT at a fixed price.', go: () => setSheet({ kind: 'sell' as const }) },
-							{ label: 'Create bundle', hint: 'Several NFTs as one all-or-nothing lot.', go: () => setSheet({ kind: 'listBundle' as const }) },
-							{ label: 'Mystery sale', hint: 'A random draw — packs, raffles, gacha.', go: () => { setSheet(null); setView({ kind: 'listBucket' }); } },
-							{ label: 'Sell mint spots', hint: 'The right to mint a fresh edition.', go: () => setSheet({ kind: 'mintspots' as const }) },
-							{
-								label: 'Sweep',
-								hint: 'Buy the cheapest single listings of one collection at once.',
-								go: () => {
-									setBuyKind('single');
-									setSheet({ kind: 'sweep' as const });
-								}
-							}
-						].map((o) => (
-							<button key={o.label} type="button" className="magi-market-createrow" onClick={o.go}>
+						{toolbarActions.map((o) => (
+							<button
+								key={o.label}
+								type="button"
+								className="magi-market-createrow"
+								onClick={() => {
+									setSheet(null);
+									o.go();
+								}}
+							>
 								<span className="magi-market-createrow-label">{o.label}</span>
 								<span className="magi-market-createrow-hint">{o.hint}</span>
 							</button>
@@ -1831,48 +1878,29 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 
 				<div className="magi-market-subtabs-row">
 					<div className="magi-market-subtabs-action magi-market-subtabs-action--left">
-						{section === 'market' && username && tab === 'buy' && (
-							// Five ways to sell is three wrapped rows on a phone,
-							// pushing the goods below the fold. Narrow panels get
-							// one button and a chooser that has room to say what
-							// each option actually does.
-							isNarrow ? (
-								<ToolbarAction label="Sell or sweep" onClick={() => setSheet({ kind: 'create' })} />
-							) : (
+						{section === 'market' && username && (
+							// Everything the current tab can create, from one list.
+							// When they do not fit, they go behind a single button
+							// rather than overflowing the row — which is what a fixed
+							// breakpoint kept getting wrong, since "enough space"
+							// depends on how MANY actions this tab has, not on a
+							// width someone guessed.
+							actionsFit ? (
 								<>
-									<ToolbarAction label="Sell an NFT" onClick={() => setSheet({ kind: 'sell' })} />
-									<ToolbarAction label="Create bundle" onClick={() => setSheet({ kind: 'listBundle' })} style={{ marginLeft: '0.5rem' }} />
-									<ToolbarAction label="Mystery sale" onClick={() => setView({ kind: 'listBucket' })} style={{ marginLeft: '0.5rem' }} />
-									<ToolbarAction label="Sell mint spots" onClick={() => setSheet({ kind: 'mintspots' })} style={{ marginLeft: '0.5rem' }} />
-									<ToolbarAction
-										label="Sweep"
-										// Sweep only handles single listings. Selecting that chip
-										// first makes the tab show exactly what the form can act
-										// on, instead of a mixed grid three-quarters of which it
-										// silently ignores.
-										onClick={() => {
-											setBuyKind('single');
-											setSheet({ kind: 'sweep' });
-										}}
-										style={{ marginLeft: '0.5rem' }}
-									/>
+									{toolbarActions.map((a, i) => (
+										<ToolbarAction
+											key={a.label}
+											label={a.label}
+											onClick={a.go}
+											style={i > 0 ? { marginLeft: '0.5rem' } : undefined}
+										/>
+									))}
 								</>
+							) : (
+								toolbarActions.length > 0 && (
+									<ToolbarAction label="Actions" onClick={() => setSheet({ kind: 'create' })} />
+								)
 							)
-						)}
-						{section === 'market' && username && tab === 'offers' && (
-							<ToolbarAction label="Make an offer" onClick={() => setSheet({ kind: 'offer' })} />
-						)}
-						{section === 'market' && username && tab === 'auctions' && (
-							<ToolbarAction label="New auction" onClick={() => setSheet({ kind: 'auction' })} />
-						)}
-						{section === 'market' && username && tab === 'swaps' && (
-							<ToolbarAction label="Propose swap" onClick={() => setSheet({ kind: 'proposeSwap' })} />
-						)}
-						{section === 'market' && username && tab === 'rentals' && (
-							<ToolbarAction label="List for rental" onClick={() => setSheet({ kind: 'listRental' })} />
-						)}
-						{section === 'market' && username && tab === 'tokens' && (
-							<ToolbarAction label="Sell a token" onClick={() => setSheet({ kind: 'sellToken' })} />
 						)}
 					</div>
 					<div className="magi-market-subtabs">
@@ -1959,7 +1987,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							['all', 'Everything', filteredBuyItems.length],
 							['single', 'Single NFTs', buyCounts.single],
 							['bundle', 'Bundles', buyCounts.bundle],
-							['random', 'Random packs', buyCounts.random],
+							['random', 'Mystery sales', buyCounts.random],
 							['mint', 'Mint spots', buyCounts.mint]
 						] as Array<[('all' | BuyKind), string, number]>).map(([id, label, n]) => (
 							<button
