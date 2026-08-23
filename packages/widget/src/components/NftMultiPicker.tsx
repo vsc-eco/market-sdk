@@ -8,6 +8,7 @@ import {
 } from '@vsc.eco/token-sdk';
 import { Spinner } from './Spinner.js';
 import { useCollectionMeta } from './useCollectionMeta.js';
+import { CollectionGroup } from './CollectionGroup.js';
 import { useTemplateLinks } from './useTemplateLinks.js';
 import magiSvg from '../assets/magi.svg';
 
@@ -373,6 +374,34 @@ export function NftMultiPicker({
 		]);
 	}
 
+	/**
+	 * Split whatever is on show into per-collection sections.
+	 *
+	 * A picker is where you go looking for a specific NFT, and a flat grid of
+	 * every collection at once is the hardest possible place to find one. It
+	 * also makes the single-collection rule legible: the collection you are
+	 * committed to sits first, and the others are visibly separate rather
+	 * than merely dimmed.
+	 */
+	function byCollection<T>(rows: T[], contractOf: (row: T) => string) {
+		const m = new Map<string, T[]>();
+		for (const r of rows) {
+			const c = contractOf(r);
+			const at = m.get(c);
+			if (at) at.push(r);
+			else m.set(c, [r]);
+		}
+		return Array.from(m, ([contractId, items]) => ({ contractId, items })).sort((a, b) => {
+			if (effectiveLock) {
+				if (a.contractId === effectiveLock) return -1;
+				if (b.contractId === effectiveLock) return 1;
+			}
+			return collMeta.name(a.contractId).localeCompare(collMeta.name(b.contractId), undefined, {
+				sensitivity: 'base'
+			});
+		});
+	}
+
 	// ---- edition grouping ----
 	const templates = useTemplateLinks(config, groupEditions);
 
@@ -512,9 +541,19 @@ export function NftMultiPicker({
 						{items.length === 0 ? 'No NFTs found.' : 'No matches.'}
 					</div>
 				)}
-				{groupEditions && groups.length > 0 && (
-					<div className="magi-market-grid">
-						{groups.map((g) => {
+				{groupEditions && groups.length > 0 &&
+					byCollection(groups, (g) => g.lead.contractId).map((coll) => (
+					<CollectionGroup
+						key={coll.contractId}
+						collectionName={collMeta.name(coll.contractId)}
+						owner={collMeta.owner(coll.contractId)}
+						count={coll.items.length}
+						// Everything but the collection you are committed to starts
+						// folded: it is unpickable while the lock holds, so it is
+						// context rather than choice.
+						defaultOpen={!effectiveLock || coll.contractId === effectiveLock}
+					>
+						{coll.items.map((g) => {
 							const dimmed = !!effectiveLock && g.lead.contractId !== effectiveLock && g.picked === 0;
 							return (
 								<GroupTile
@@ -542,11 +581,18 @@ export function NftMultiPicker({
 								/>
 							);
 						})}
-					</div>
-				)}
-				{!groupEditions && filtered.length > 0 && (
-					<div className="magi-market-grid">
-						{filtered.map((i) => {
+					</CollectionGroup>
+				))}
+				{!groupEditions && filtered.length > 0 &&
+					byCollection(filtered, (i) => i.contractId).map((coll) => (
+					<CollectionGroup
+						key={coll.contractId}
+						collectionName={collMeta.name(coll.contractId)}
+						owner={collMeta.owner(coll.contractId)}
+						count={coll.items.length}
+						defaultOpen={!effectiveLock || coll.contractId === effectiveLock}
+					>
+						{coll.items.map((i) => {
 							const k = key(i);
 							const picked = pickedKeys.has(k);
 							const dimmed = !!effectiveLock && i.contractId !== effectiveLock && !picked;
@@ -564,8 +610,8 @@ export function NftMultiPicker({
 								/>
 							);
 						})}
-					</div>
-				)}
+					</CollectionGroup>
+				))}
 			</div>
 			{amountFor && (() => {
 				const cap = addableUnits(amountFor);
@@ -652,8 +698,8 @@ export function NftMultiPicker({
 
 			{effectiveLock && (
 				<span className="magi-market-field-hint">
-					Everything must come from one collection. Showing{' '}
-					<strong>{collMeta.name(effectiveLock)}</strong> only — clear the selection to switch.
+					Everything must come from one collection — <strong>{collMeta.name(effectiveLock)}</strong>{' '}
+					here. The rest are folded away; clear the selection to switch.
 				</span>
 			)}
 		</div>
