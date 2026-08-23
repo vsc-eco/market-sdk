@@ -26,7 +26,8 @@ interface BroadcastResultProps {
 const STATE_TEXT: Record<TxState, string> = {
 	pending: 'Waiting for the network…',
 	included: 'In a block — finalising…',
-	confirmed: 'Confirmed',
+	confirmed: 'Confirmed — updating the market…',
+	indexed: 'Confirmed',
 	failed: 'Failed on chain',
 	unknown: 'Still not visible — check the explorer'
 };
@@ -73,7 +74,7 @@ export function BroadcastResult({
 				{config ? (
 					<>
 						{watching && <span className="magi-market-tx-spin" aria-hidden="true" />}
-						{state === 'confirmed' && <span className="magi-market-tx-tick" aria-hidden="true">✓</span>}
+						{state === 'indexed' && <span className="magi-market-tx-tick" aria-hidden="true">✓</span>}
 						{STATE_TEXT[state]}
 					</>
 				) : (

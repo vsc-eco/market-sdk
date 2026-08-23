@@ -5,7 +5,8 @@ import { useTxStatus, type TxState } from './useTxStatus.js';
 const LABEL: Record<TxState, string> = {
 	pending: 'Waiting for the network…',
 	included: 'In a block — finalising…',
-	confirmed: 'Done',
+	confirmed: 'Confirmed — updating…',
+	indexed: 'Done',
 	failed: 'Failed on chain',
 	unknown: 'Still not visible — check the explorer'
 };
@@ -39,12 +40,12 @@ export function TxWatch({ config, txId, label, onSettled, onDismiss }: TxWatchPr
 
 	useEffect(() => {
 		if (settled.current) return;
-		if (state !== 'confirmed' && state !== 'failed') return;
+		if (state !== 'indexed' && state !== 'failed') return;
 		settled.current = true;
-		if (state === 'confirmed') onSettled(txId);
+		if (state === 'indexed') onSettled(txId);
 		// A finished line is worth reading, not worth keeping. Failures stay
 		// until dismissed: that one you need to act on.
-		if (state === 'confirmed') {
+		if (state === 'indexed') {
 			const t = setTimeout(() => onDismiss(txId), 6000);
 			return () => clearTimeout(t);
 		}
@@ -53,7 +54,7 @@ export function TxWatch({ config, txId, label, onSettled, onDismiss }: TxWatchPr
 	return (
 		<div className={`magi-market-txwatch tx-${state}`}>
 			{watching && <span className="magi-market-tx-spin" aria-hidden="true" />}
-			{state === 'confirmed' && <span className="magi-market-tx-tick" aria-hidden="true">✓</span>}
+			{state === 'indexed' && <span className="magi-market-tx-tick" aria-hidden="true">✓</span>}
 			<span className="magi-market-txwatch-label">{label}</span>
 			<span className="magi-market-txwatch-state">{LABEL[state]}</span>
 			<button

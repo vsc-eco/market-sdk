@@ -2751,3 +2751,15 @@
 	padding: 0 0.2rem;
 }
 .magi-market-txwatch-list { margin-bottom: 0.6rem; }
+/* `indexed` is the real finish line — confirmed only means the chain has it,
+   and the widget reads everything through the indexer. */
+.magi-market-success.tx-indexed { border-color: rgba(16, 185, 129, 0.55); }
+.magi-market-success.tx-indexed .magi-market-success-label { color: #34d399; }
+.magi-market-success.tx-confirmed {
+	border-color: var(--magi-field-border);
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+}
+.magi-market-success.tx-confirmed .magi-market-success-label { color: var(--magi-text-secondary); }
+.magi-market-txwatch.tx-indexed { border-color: rgba(16, 185, 129, 0.5); color: #34d399; }
+.magi-market-txwatch.tx-confirmed { border-color: var(--magi-field-border); color: inherit; }
+.magi-market-txwatch.tx-indexed .magi-market-txwatch-state { color: inherit; }
