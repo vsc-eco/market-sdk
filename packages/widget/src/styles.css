@@ -2355,7 +2355,12 @@
 	-ms-overflow-style: none;
 }
 .magi-market.is-narrow .magi-market-kindchips::-webkit-scrollbar { display: none; }
-.magi-market.is-narrow .magi-market-kindchip { flex: 0 0 auto; }
+/* A chip must not be cut mid-word by the scroller: "Single NFTs" clipping to
+   "Ts" reads as a bug, not as "scroll for more". */
+.magi-market.is-narrow .magi-market-kindchip {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
 
 /* ---- pack reveal ---------------------------------------------------- */
 .magi-market-reveal {
@@ -2763,3 +2768,29 @@
 .magi-market-txwatch.tx-indexed { border-color: rgba(16, 185, 129, 0.5); color: #34d399; }
 .magi-market-txwatch.tx-confirmed { border-color: var(--magi-field-border); color: inherit; }
 .magi-market-txwatch.tx-indexed .magi-market-txwatch-state { color: inherit; }
+
+/* ---- mystery-sale detail card ---------------------------------------- */
+.magi-market-bucketcard { display: block; }
+/* Prices and the buy actions. Wraps rather than overflowing: on a phone a
+   title, two prices and two buttons never fit one line, which is exactly how
+   this card used to push its own buttons off the screen. */
+.magi-market-bucketcard-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.6rem 0.7rem;
+	margin-bottom: 0.6rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+}
+.magi-market-bucketcard-price {
+	font-size: 0.86rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.magi-market-bucketcard-bar .magi-market-submit {
+	width: auto;
+	flex: 1 1 8rem;
+	padding: 0.4rem 0.9rem;
+}

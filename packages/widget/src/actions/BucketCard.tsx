@@ -6,10 +6,8 @@ import {
 	TESTNET_CONFIG as TOKEN_TESTNET,
 	type NftItem
 } from '@vsc.eco/token-sdk';
-import { CollectionGroup } from '../components/CollectionGroup.js';
 import { Spinner } from '../components/Spinner.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
-import { useCollectionMeta } from '../components/useCollectionMeta.js';
 import magiSvg from '../assets/magi.svg';
 
 export interface BucketCardProps {
@@ -113,7 +111,6 @@ export function BucketCard({
 	onOpenNft
 }: BucketCardProps) {
 	const tokenMeta = useTokenMeta(client.config);
-	const collMeta = useCollectionMeta(client.config);
 	const tokenConfig = useMemo(
 		() => (client.config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
 		[client.config.network]
@@ -183,20 +180,19 @@ export function BucketCard({
 	const action = (
 		<>
 			{singlesOn && (
-				<span className="magi-market-row-price" style={{ fontSize: '0.82rem', marginRight: '0.2rem' }}>
-					{tokenMeta.format(bucket.paymentToken, bucket.pricePerDraw)} {sym}/draw
+				<span className="magi-market-bucketcard-price">
+					{tokenMeta.format(bucket.paymentToken, bucket.pricePerDraw)} {sym}<span className="magi-market-tile-per">/draw</span>
 				</span>
 			)}
 			{packsOn && (
-				<span className="magi-market-row-price" style={{ fontSize: '0.82rem', marginRight: '0.2rem' }}>
-					{tokenMeta.format(bucket.paymentToken, bucket.pricePerPack)} {sym}/pack
+				<span className="magi-market-bucketcard-price">
+					{tokenMeta.format(bucket.paymentToken, bucket.pricePerPack)} {sym}<span className="magi-market-tile-per">/pack</span>
 				</span>
 			)}
 			{mine ? (
 				<button
 					type="button"
 					className="magi-market-submit ghost"
-					style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
 					disabled={busy}
 					onClick={onCancel}
 				>
@@ -208,7 +204,6 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
 							disabled={!username || busy || bucket.unitsLeft === 0}
 							onClick={onDraw}
 						>
@@ -219,7 +214,6 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							style={{ width: 'auto', padding: '0.35rem 0.8rem' }}
 							disabled={!username || busy || !packFillable}
 							title={packFillable ? undefined : 'A guaranteed stack has run out'}
 							onClick={onBuyPack}
@@ -233,11 +227,12 @@ export function BucketCard({
 	);
 
 	return (
-		<CollectionGroup
-			collectionName={`Bucket #${bucket.bucketId} · ${collMeta.name(bucket.nftContract)}`}
-			count={bucket.unitsLeft}
-			action={action}
-		>
+		// No collapsible header here: this card only ever renders inside the
+		// sale's own panel, which already carries its name — and cramming a
+		// title, two prices and two buttons into one header row is what broke
+		// the layout on a phone. Prices and actions get a row that wraps.
+		<div className="magi-market-bucketcard">
+			<div className="magi-market-bucketcard-bar">{action}</div>
 			<div className="magi-market-row-sub" style={{ padding: '0 0.2rem 0.5rem' }}>
 				{bucket.unitsLeft} of {bucket.unitsStocked} left
 				{bucket.packDraws.length > 1 && (
@@ -276,6 +271,6 @@ export function BucketCard({
 						/>
 					))
 			)}
-		</CollectionGroup>
+		</div>
 	);
 }
