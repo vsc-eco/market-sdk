@@ -2651,3 +2651,11 @@
 	border-radius: 8px;
 	padding: 0.45rem 0.6rem;
 }
+
+/* A single-pick sale is one pile: no accordion, no name, so the card chrome
+   around it is a box drawn around the only thing on the step. */
+.magi-market-stack.flat {
+	border: 0;
+	padding: 0;
+	margin-bottom: 0;
+}

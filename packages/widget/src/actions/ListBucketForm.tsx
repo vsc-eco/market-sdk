@@ -302,10 +302,15 @@ export function ListBucketForm({
 					{step === 1 && (
 						<>
 							{stacks.map((stack, i) => {
-								const open = openStack === i;
+								// One pile has nothing to collapse to and nothing to
+								// distinguish from, so it drops the accordion, the name
+								// field, and the name in the picker's label.
+								const flat = !sellPacks;
+								const open = flat || openStack === i;
 								const u = units(stack);
 								return (
-									<div key={i} className={`magi-market-stack${open ? ' open' : ''}`}>
+									<div key={i} className={`magi-market-stack${open ? ' open' : ''}${flat ? ' flat' : ''}`}>
+										{!flat && (
 										<div className="magi-market-stack-head">
 											<button
 												type="button"
@@ -359,6 +364,7 @@ export function ListBucketForm({
 												</button>
 											)}
 										</div>
+										)}
 										{open && (
 											<>
 												<NftMultiPicker
@@ -366,7 +372,7 @@ export function ListBucketForm({
 													username={username}
 													value={stack.picks}
 													onChange={(picks) => updateStack(i, { picks })}
-													label={`NFTs in "${stack.name}"`}
+													label={flat ? 'NFTs in this sale' : `NFTs in "${stack.name}"`}
 													lockCollection={lockCollection}
 													filterItem={(it) => canTransferNft(it, username)}
 													max={MAX_ENTRIES}
