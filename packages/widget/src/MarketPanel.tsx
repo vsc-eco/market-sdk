@@ -48,6 +48,7 @@ import { looksTruncated } from '@vsc.eco/market-sdk';
 import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
 import { ActivityFeed } from './components/ActivityFeed.js';
+import { TxWatch } from './components/TxWatch.js';
 import {
 	ExploreFilterBar,
 	DEFAULT_EXPLORE_FILTERS,
@@ -759,8 +760,45 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		void load();
 	}, [load]);
 
+	/**
+	 * What each watched transaction was, so the strip can say "Sale listed"
+	 * rather than a hash. Keyed by tx.
+	 */
+	const [watched, setWatched] = useState<Array<{ txId: string; label: string }>>([]);
+
+	/** What the open sheet is doing, in the user's words. */
+	const sheetLabel = (k: string): string => {
+		const map: Record<string, string> = {
+			sell: 'NFT listed',
+			listBundle: 'Bundle listed',
+			mintspots: 'Mint spots listed',
+			sellToken: 'Tokens listed',
+			buy: 'Purchase',
+			buyToken: 'Token purchase',
+			buyMintSpot: 'Mint',
+			buyBundle: 'Bundle purchase',
+			bid: 'Bid placed',
+			offer: 'Offer made',
+			acceptOffer: 'Offer accepted',
+			updateListing: 'Listing updated',
+			sweep: 'Sweep',
+			auction: 'Auction created',
+			proposeSwap: 'Swap proposed',
+			acceptSwap: 'Swap accepted',
+			listRental: 'Rental listed',
+			rent: 'Rental',
+			admin: 'Collection settings',
+			addToBucket: 'Stock added'
+		};
+		return map[k] ?? 'Transaction';
+	};
+
 	const success = (tx: string) => {
 		onSuccess?.(tx);
+		// Keep watching after the form closes — the form is where the receipt
+		// used to live, and it is unmounted on the very next line.
+		const label = view?.kind === 'listBucket' ? 'Mystery sale opened' : sheetLabel(sheet?.kind ?? '');
+		setWatched((w) => (w.some((x) => x.txId === tx) ? w : [...w, { txId: tx, label }]));
 		setSheet(null);
 		void load();
 		// An accept/sale moved an NFT out of the wallet — re-read holdings so
@@ -1569,6 +1607,29 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					tokenId={sheet.tokenId}
 					onClose={() => setSheet(null)}
 				/>
+			)}
+
+			{/* What is still settling. Above the section switch because it
+			    outlives whatever view started it — you can open a sale, go to
+			    Explore, and still see it land. */}
+			{watched.length > 0 && (
+				<div className="magi-market-txwatch-list">
+					{watched.map((w) => (
+						<TxWatch
+							key={w.txId}
+							config={config}
+							txId={w.txId}
+							label={w.label}
+							onSettled={() => {
+								// NOW the market has it. The reload on broadcast ran
+								// before the network processed anything.
+								void load();
+								nftHoldings.refresh();
+							}}
+							onDismiss={(id) => setWatched((list) => list.filter((x) => x.txId !== id))}
+						/>
+					))}
+				</div>
 			)}
 
 			{/* Top-level section switch. Rendered OUTSIDE every section gate:

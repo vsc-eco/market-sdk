@@ -2709,3 +2709,45 @@
 @media (prefers-reduced-motion: reduce) {
 	.magi-market-tx-spin { animation-duration: 2.4s; }
 }
+
+/* ---- panel-level transaction watcher --------------------------------- */
+.magi-market-txwatch {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.45rem 0.7rem;
+	margin-bottom: 0.4rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+	font-size: 0.8rem;
+}
+.magi-market-txwatch.tx-confirmed {
+	border-color: rgba(16, 185, 129, 0.5);
+	color: #34d399;
+}
+.magi-market-txwatch.tx-failed {
+	border-color: rgba(239, 68, 68, 0.55);
+	color: #f87171;
+}
+.magi-market-txwatch-label { font-weight: 600; }
+.magi-market-txwatch-state {
+	color: var(--magi-text-secondary);
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-txwatch.tx-confirmed .magi-market-txwatch-state,
+.magi-market-txwatch.tx-failed .magi-market-txwatch-state { color: inherit; }
+.magi-market-txwatch-x {
+	flex: 0 0 auto;
+	border: 0;
+	background: none;
+	color: var(--magi-text-muted);
+	cursor: pointer;
+	font-size: 0.8rem;
+	padding: 0 0.2rem;
+}
+.magi-market-txwatch-list { margin-bottom: 0.6rem; }
