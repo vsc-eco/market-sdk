@@ -8,6 +8,7 @@ import {
 } from '@vsc.eco/token-sdk';
 import { Spinner } from './Spinner.js';
 import { useCollectionMeta } from './useCollectionMeta.js';
+import { useTemplateLinks } from './useTemplateLinks.js';
 import magiSvg from '../assets/magi.svg';
 
 /** One picked entry: `nftContract:tokenId` + the amount the user wants to
@@ -33,6 +34,29 @@ export interface NftMultiPickerProps {
 	filterItem?: (i: NftItem) => boolean;
 	max?: number;
 	disabled?: boolean;
+	/**
+	 * Fold tokens minted from the same template into one tile, and ask how
+	 * many to add when one is chosen.
+	 *
+	 * A mystery sale is stocked by the handful — "20 commons" — not by
+	 * hand-picking twenty near-identical editions out of a grid, which is
+	 * both tedious and impossible to check afterwards.
+	 */
+	groupEditions?: boolean;
+}
+
+/** A template's worth of tokens, folded into one tile. */
+interface EditionGroup {
+	/** `contractId:templateId`, or the token key when it stands alone. */
+	key: string;
+	label: string;
+	/** The tile's art and collection come from the first token. */
+	lead: NftItem;
+	tokens: NftItem[];
+	/** Units across every token in the group. */
+	available: number;
+	/** Units currently picked from this group. */
+	picked: number;
 }
 
 const tagOf = (i: NftItem) => (i.isUnique ? 'Unique' : i.soulbound ? 'SBT' : 'Editioned');
@@ -147,6 +171,77 @@ function MultiTile({
  * requires single-collection — the form locks the collection via
  * `lockCollection` so the dimming gives a clear visual cue).
  */
+/** One template's editions as a single tile: art, how many exist, how many are in. */
+function GroupTile({
+	group,
+	imageUrl,
+	dimmed,
+	onPick,
+	onClear
+}: {
+	group: EditionGroup;
+	imageUrl: string | null | undefined;
+	dimmed: boolean;
+	onPick: () => void;
+	onClear: () => void;
+}) {
+	const [imgFailed, setImgFailed] = useState(false);
+	const useFallback = !imageUrl || imgFailed;
+	const picked = group.picked > 0;
+	const many = group.tokens.length > 1 || group.available > 1;
+	return (
+		<div
+			className={`magi-market-tile${picked ? ' selected' : ''}${dimmed ? ' dimmed' : ''}`}
+			role="button"
+			tabIndex={dimmed ? -1 : 0}
+			onClick={(e) => {
+				if (dimmed) return;
+				if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+				onPick();
+			}}
+			onKeyDown={(e) => {
+				if (dimmed) return;
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					onPick();
+				}
+			}}
+			style={dimmed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+		>
+			<div className={`magi-market-tile-image ${useFallback ? 'fallback' : ''}`}>
+				{useFallback ? (
+					<img src={magiSvg} alt={group.label} className="magi-market-tile-fallback-img" />
+				) : (
+					<img
+						src={imageUrl as string}
+						alt={group.label}
+						loading="lazy"
+						decoding="async"
+						onError={() => setImgFailed(true)}
+					/>
+				)}
+				{picked && <span className="magi-market-tile-badge">{group.picked} in</span>}
+			</div>
+			<div className="magi-market-tile-id" title={group.label}>{group.label}</div>
+			<div className="magi-market-tile-row">
+				<span className="magi-market-tile-balance">
+					{many ? `${group.available} available` : 'one of a kind'}
+				</span>
+			</div>
+			{picked && (
+				<div className="magi-market-tile-actions">
+					<button type="button" className="magi-market-submit ghost" onClick={onPick}>
+						Change
+					</button>
+					<button type="button" className="magi-market-submit ghost" onClick={onClear}>
+						Remove
+					</button>
+				</div>
+			)}
+		</div>
+	);
+}
+
 export function NftMultiPicker({
 	config,
 	username,
@@ -156,7 +251,8 @@ export function NftMultiPicker({
 	lockCollection,
 	filterItem,
 	max,
-	disabled
+	disabled,
+	groupEditions = false
 }: NftMultiPickerProps) {
 	const tokenConfig = useMemo(
 		() => (config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
@@ -271,6 +367,68 @@ export function NftMultiPicker({
 		]);
 	}
 
+	// ---- edition grouping ----
+	const templates = useTemplateLinks(config, groupEditions);
+
+	/** Which group is asking "how many?", if any. */
+	const [amountFor, setAmountFor] = useState<EditionGroup | null>(null);
+	const [amountText, setAmountText] = useState('1');
+
+	const groups = useMemo<EditionGroup[]>(() => {
+		if (!groupEditions) return [];
+		const by = new Map<string, EditionGroup>();
+		for (const i of filtered) {
+			const tpl = templates.templateOf(i.contractId, i.tokenId);
+			// A token with no template stands alone — it is its own group, so
+			// uniques keep behaving exactly as they did before.
+			const k = tpl ? `${i.contractId}:tpl:${tpl}` : key(i);
+			const at = by.get(k);
+			if (at) {
+				at.tokens.push(i);
+				at.available += i.balance;
+			} else {
+				by.set(k, {
+					key: k,
+					label: tpl ?? `#${i.tokenId}`,
+					lead: i,
+					tokens: [i],
+					available: i.balance,
+					picked: 0
+				});
+			}
+		}
+		for (const g of by.values()) {
+			g.picked = g.tokens.reduce(
+				(n, t) => n + (value.find((v) => `${v.nftContract}:${v.tokenId}` === key(t))?.amount ?? 0),
+				0
+			);
+		}
+		return Array.from(by.values());
+	}, [groupEditions, filtered, templates, value]);
+
+	/**
+	 * Spread `n` units across a group's tokens, filling each to its balance
+	 * before moving on. One entry per token is what the contract stores, so
+	 * the group is purely how the seller thinks about it.
+	 */
+	function applyGroupAmount(g: EditionGroup, n: number) {
+		const without = value.filter(
+			(v) => !g.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
+		);
+		const added: NftMultiPick[] = [];
+		let left = Math.max(0, Math.min(n, g.available));
+		for (const t of g.tokens) {
+			if (left <= 0) break;
+			const take = Math.min(left, t.balance);
+			added.push({ nftContract: t.contractId, tokenId: t.tokenId, amount: take });
+			left -= take;
+		}
+		const next = [...without, ...added];
+		// `max` counts ENTRIES, which is what the contract charges for.
+		if (max != null && next.length > max) return;
+		onChange(next);
+	}
+
 	function setAmount(k: string, n: number) {
 		onChange(
 			value.map((v) =>
@@ -329,7 +487,39 @@ export function NftMultiPicker({
 						{items.length === 0 ? 'No NFTs found.' : 'No matches.'}
 					</div>
 				)}
-				{filtered.length > 0 && (
+				{groupEditions && groups.length > 0 && (
+					<div className="magi-market-grid">
+						{groups.map((g) => {
+							const dimmed = !!effectiveLock && g.lead.contractId !== effectiveLock && g.picked === 0;
+							return (
+								<GroupTile
+									key={g.key}
+									group={g}
+									imageUrl={imgFor(g.lead)}
+									dimmed={dimmed}
+									onPick={() => {
+										if (dimmed) return;
+										// Cross-collection: the contract takes one collection
+										// per sale, so choosing another replaces the selection.
+										if (effectiveLock && g.lead.contractId !== effectiveLock) {
+											onChange([]);
+										}
+										setAmountText(String(g.picked > 0 ? g.picked : Math.min(1, g.available)));
+										setAmountFor(g);
+									}}
+									onClear={() =>
+										onChange(
+											value.filter(
+												(v) => !g.tokens.some((t) => key(t) === `${v.nftContract}:${v.tokenId}`)
+											)
+										)
+									}
+								/>
+							);
+						})}
+					</div>
+				)}
+				{!groupEditions && filtered.length > 0 && (
 					<div className="magi-market-grid">
 						{filtered.map((i) => {
 							const k = key(i);
@@ -352,6 +542,67 @@ export function NftMultiPicker({
 					</div>
 				)}
 			</div>
+			{amountFor && (
+				<div
+					className="magi-market-modal"
+					role="dialog"
+					aria-modal="true"
+					onClick={() => setAmountFor(null)}
+				>
+					<div
+						className="magi-market-modal-card magi-market-confirm"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<h3 className="magi-market-modal-title">
+							<span>How many {amountFor.label}?</span>
+						</h3>
+						<p className="magi-market-field-hint">
+							{amountFor.available} available across {amountFor.tokens.length} edition
+							{amountFor.tokens.length === 1 ? '' : 's'}. More copies of a card means it is
+							drawn more often.
+						</p>
+						<input
+							className="magi-market-input"
+							type="number"
+							min={0}
+							max={amountFor.available}
+							value={amountText}
+							autoFocus
+							onChange={(e) => setAmountText((e.target as HTMLInputElement).value)}
+							onKeyDown={(e) => {
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									applyGroupAmount(amountFor, Number(amountText) || 0);
+									setAmountFor(null);
+								}
+							}}
+						/>
+						<div className="magi-market-confirm-actions">
+							<button
+								type="button"
+								className="magi-market-submit ghost"
+								onClick={() => {
+									applyGroupAmount(amountFor, amountFor.available);
+									setAmountFor(null);
+								}}
+							>
+								All {amountFor.available}
+							</button>
+							<button
+								type="button"
+								className="magi-market-submit"
+								onClick={() => {
+									applyGroupAmount(amountFor, Number(amountText) || 0);
+									setAmountFor(null);
+								}}
+							>
+								Add
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
 			{effectiveLock && (
 				<span className="magi-market-field-hint">
 					Everything must come from one collection. Showing{' '}

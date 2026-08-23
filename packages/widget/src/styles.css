@@ -2092,10 +2092,10 @@
 .magi-market-view .magi-market-bucketform .magi-market-grid {
 	max-height: none;
 	overflow-y: visible;
-	/* Smaller tiles here than in the dialog: the panel is ~690px so this fits
-	   five or six per row instead of three, which is the whole reason for
-	   moving out of the popup. */
-	grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+	/* Half again as wide as the 104px this started at: a token id is the one
+	   thing on the tile you cannot guess from the picture, and at the smaller
+	   size it was being cut off. */
+	grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
 }
 /* Prose and single-line inputs keep a readable measure even though the view is
    wide. Width is for the grid; a 690px-wide text input is not an improvement. */

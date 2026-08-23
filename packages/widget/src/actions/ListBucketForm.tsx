@@ -373,6 +373,10 @@ export function ListBucketForm({
 													value={stack.picks}
 													onChange={(picks) => updateStack(i, { picks })}
 													label={flat ? 'NFTs in this sale' : `NFTs in "${stack.name}"`}
+													// Stock by the handful: editions fold into one tile
+													// and ask how many, rather than making the seller
+													// click twenty near-identical cards.
+													groupEditions
 													lockCollection={lockCollection}
 													filterItem={(it) => canTransferNft(it, username)}
 													max={MAX_ENTRIES}
