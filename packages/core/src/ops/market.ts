@@ -996,6 +996,37 @@ export function buildListBucketFlow(
 }
 
 /**
+ * Add stock to an existing bucket, approving the market for each NFT first.
+ *
+ * The same per-token allowance `listBucket` needs: the contract checks every
+ * entry is stockable, and a restock is no more privileged than the original
+ * listing, so it need not grant blanket control of the collection either.
+ *
+ * `nftContract` is the bucket's own collection — a bucket holds one, and the
+ * contract rejects an entry from anywhere else.
+ */
+export function buildAddToBucketFlow(
+	ctx: MarketOpContext,
+	p: {
+		bucketId: number;
+		nftContract: string;
+		entries: BucketEntryParam[];
+		skipApproval?: boolean;
+	}
+): MarketOpBundle[] {
+	const out: MarketOpBundle[] = [];
+	if (!p.skipApproval) {
+		for (const e of p.entries) {
+			out.push(
+				buildNftApprove(ctx, { nftContract: p.nftContract, tokenId: e.tokenId, amount: e.amount })
+			);
+		}
+	}
+	out.push(buildAddToBucket(ctx, { bucketId: p.bucketId, entries: p.entries }));
+	return out;
+}
+
+/**
  * List a bundle, approving the market for each NFT in it.
  *
  * Same reasoning as buckets: a per-item allowance is enough for the contract,

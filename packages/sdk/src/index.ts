@@ -27,6 +27,7 @@ import {
 	buildDelistBundle,
 	buildListBucket,
 	buildListBucketFlow,
+	buildAddToBucketFlow,
 	buildListBundleFlow,
 	buildAddToBucket,
 	buildBuyFromBucket,
@@ -330,6 +331,11 @@ export interface MarketClient {
 		username: string,
 		p: ListBucketParams & { skipApproval?: boolean }
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract "restock a bucket": one NFT approve per entry + `addToBucket`. */
+	addToBucket(
+		username: string,
+		p: { bucketId: number; nftContract: string; entries: BucketEntryParam[]; skipApproval?: boolean }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract "list a bundle": one NFT approve per item + `listBundle`. */
 	listBundle(
 		username: string,
@@ -562,6 +568,7 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 		broadcastBatch,
 		sell: (u, p) => broadcastBatch(buildSellNftFlow(ctx(u), p)),
 		listBucket: (u, p) => broadcastBatch(buildListBucketFlow(ctx(u), p)),
+		addToBucket: (u, p) => broadcastBatch(buildAddToBucketFlow(ctx(u), p)),
 		listBundle: (u, p) => broadcastBatch(buildListBundleFlow(ctx(u), p)),
 		auction: (u, p) => broadcastBatch(buildAuctionNftFlow(ctx(u), p)),
 		rental: (u, p) => broadcastBatch(buildRentalNftFlow(ctx(u), p)),

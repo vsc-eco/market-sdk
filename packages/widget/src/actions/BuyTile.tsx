@@ -65,6 +65,7 @@ export type BuySheetRequest =
 	| { kind: 'buyBundle'; bundle: BundleListing }
 	| { kind: 'bundleDetail'; bundle: BundleListing }
 	| { kind: 'bucketDetail'; bucket: BucketListing }
+	| { kind: 'addToBucket'; bucket: BucketListing }
 	| { kind: 'buyMintSpot'; listing: MintSpotListing };
 
 export function BuyTile({
@@ -187,11 +188,19 @@ export function BuyTile({
 					onOpen={() => onSheet({ kind: 'bucketDetail', bucket: b })}
 					actions={
 						mine ? (
-							<button type="button" className="magi-market-submit ghost"
-								disabled={canceling === `bucket:${b.bucketId}`}
-								onClick={() => onCancel('bucket', b.bucketId)}>
-								{canceling === `bucket:${b.bucketId}` ? 'Cancelling…' : 'Cancel'}
-							</button>
+							<>
+								{/* A sale can be topped up after it opens — that is how it
+								    gets past the 24 entries one transaction carries. */}
+								<button type="button" className="magi-market-submit ghost"
+									onClick={() => onSheet({ kind: 'addToBucket', bucket: b })}>
+									Add
+								</button>
+								<button type="button" className="magi-market-submit ghost"
+									disabled={canceling === `bucket:${b.bucketId}`}
+									onClick={() => onCancel('bucket', b.bucketId)}>
+									{canceling === `bucket:${b.bucketId}` ? 'Cancelling…' : 'Cancel'}
+								</button>
+							</>
 						) : (
 							<>
 								<button type="button" className="magi-market-submit"

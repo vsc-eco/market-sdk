@@ -29,6 +29,7 @@ import { BundleCard } from './actions/BundleCard.js';
 import { BucketCard } from './actions/BucketCard.js';
 import { BuyTile, type BuyItem, type BuyKind } from './actions/BuyTile.js';
 import { DrawReveal } from './actions/DrawReveal.js';
+import { AddToBucketForm } from './actions/AddToBucketForm.js';
 import { ListBucketForm } from './actions/ListBucketForm.js';
 import { ListBundleForm } from './actions/ListBundleForm.js';
 import { AcceptSwapForm } from './actions/AcceptSwapForm.js';
@@ -235,6 +236,7 @@ type Sheet =
 	| { kind: 'reveal'; bucket: BucketListing; txId: string }
 	| { kind: 'bundleDetail'; bundle: BundleListing }
 	| { kind: 'bucketDetail'; bucket: BucketListing }
+	| { kind: 'addToBucket'; bucket: BucketListing }
 	| { kind: 'proposeSwap' }
 	| { kind: 'acceptSwap'; swap: SwapProposal }
 	| { kind: 'listRental' }
@@ -1483,6 +1485,15 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
 					/>
 				</PanelView>
+			)}
+			{sheet?.kind === 'addToBucket' && username && (
+				<AddToBucketForm
+					client={client}
+					username={username}
+					bucket={sheet.bucket}
+					onSuccess={success}
+					onClose={() => setSheet(null)}
+				/>
 			)}
 			{sheet?.kind === 'bundleDetail' && (
 				<PanelView

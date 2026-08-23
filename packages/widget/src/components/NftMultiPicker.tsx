@@ -43,6 +43,11 @@ export interface NftMultiPickerProps {
 	 * both tedious and impossible to check afterwards.
 	 */
 	groupEditions?: boolean;
+	/**
+	 * Replaces the "add more later" line when that is not true here — a
+	 * bundle is fixed at creation, so only the mystery sale can say it.
+	 */
+	overLimitNote?: string;
 }
 
 /** A template's worth of tokens, folded into one tile. */
@@ -252,7 +257,8 @@ export function NftMultiPicker({
 	filterItem,
 	max,
 	disabled,
-	groupEditions = false
+	groupEditions = false,
+	overLimitNote
 }: NftMultiPickerProps) {
 	const tokenConfig = useMemo(
 		() => (config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
@@ -608,9 +614,11 @@ export function NftMultiPicker({
 						    than refusing the number after the fact. */}
 						{cap < amountFor.available && (
 							<p className={`magi-market-field-hint${overCap ? ' magi-market-cap-hit' : ''}`}>
-								Up to {cap} here — a sale holds {max} editions
+								Up to {cap} here — one transaction carries {max} editions
 								{usedElsewhere > 0 ? ` and ${usedElsewhere} ${usedElsewhere === 1 ? 'is' : 'are'} already used` : ''}.
-								{overCap ? ' Lower the number, or free up space first.' : ''}
+								{' '}
+								{overLimitNote ??
+									'You can add more once the sale is open, up to 512 in total.'}
 							</p>
 						)}
 						<div className="magi-market-confirm-actions">

@@ -153,7 +153,7 @@ export function ListBucketForm({
 		const stackProblem = (() => {
 			if (totalEntries === 0) return 'Pick at least one NFT.';
 			if (totalEntries > MAX_ENTRIES)
-				return `${totalEntries} NFTs picked — up to ${MAX_ENTRIES} per bucket here; add the rest afterwards.`;
+				return `${totalEntries} NFTs picked — one transaction carries ${MAX_ENTRIES}. Open the sale with these and add the rest from its "Add" button.`;
 			const empty = stacks.findIndex((t) => t.picks.length === 0);
 			if (empty !== -1) return `"${stacks[empty].name}" has no NFTs — fill it or remove the stack.`;
 			if (sellPacks) {
