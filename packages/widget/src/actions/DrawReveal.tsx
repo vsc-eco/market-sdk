@@ -7,6 +7,7 @@ import {
 	type NftItem
 } from '@vsc.eco/token-sdk';
 import { Spinner } from '../components/Spinner.js';
+import { useTxStatus } from '../components/useTxStatus.js';
 import magiSvg from '../assets/magi.svg';
 
 export interface DrawRevealProps {
@@ -41,10 +42,20 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 	const [shown, setShown] = useState(0);
 	const cancelled = useRef(false);
 
-	// The indexer is a few seconds behind the tx, so poll rather than read
-	// once. Bounded: a reveal that never resolves has to say so and hand back
-	// a way out, not spin forever over a purchase that already succeeded.
+	/**
+	 * Follow the transaction to `indexed` first.
+	 *
+	 * The draws live in the indexer, so asking for them before it has read
+	 * the block they are in can only return nothing. This used to run its own
+	 * 30-second timer and give up — which is what put "the indexer hasn't
+	 * caught up" on screen for a purchase that had worked perfectly.
+	 */
+	const { state } = useTxStatus(client.config, txId);
+
+	// Once the block is indexed the rows are there; a couple of retries cover
+	// the moment between the health check advancing and the insert landing.
 	useEffect(() => {
+		if (state !== 'indexed') return;
 		cancelled.current = false;
 		let tries = 0;
 		const tick = async () => {
@@ -56,7 +67,7 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 				setDraws(rows.sort((a, b) => a.drawIndex - b.drawIndex));
 				return;
 			}
-			if (tries >= 15) {
+			if (tries >= 10) {
 				setTimedOut(true);
 				return;
 			}
@@ -66,7 +77,13 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 		return () => {
 			cancelled.current = true;
 		};
-	}, [client, txId]);
+	}, [state, client, txId]);
+
+	// A transaction that failed on chain drew nothing — say that, rather than
+	// waiting out a clock for rows that are never coming.
+	useEffect(() => {
+		if (state === 'failed') setTimedOut(true);
+	}, [state]);
 
 	// Art for the drawn tokens, once we know what they are. Same resolver the
 	// bucket card uses, so a revealed card looks like the one in the stack.
@@ -111,9 +128,10 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 	if (timedOut) {
 		return (
 			<div className="magi-market-reveal">
-				<p className="magi-market-status">
-					Your draw went through — the indexer hasn’t caught up yet, so we can’t show the
-					cards here. They’re in your wallet either way.
+				<p className="magi-market-status warn">
+					{state === 'failed'
+						? 'That draw failed on chain — nothing was drawn and nothing was charged.'
+						: 'Your draw went through, but we still cannot read the cards back. They are in your wallet either way — check the NFT page.'}
 				</p>
 				<button type="button" className="magi-market-submit" onClick={onClose}>Close</button>
 			</div>
@@ -121,11 +139,22 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 	}
 
 	if (!draws) {
+		const waiting =
+			state === 'pending'
+				? 'Waiting for the network…'
+				: state === 'included'
+					? 'In a block — finalising…'
+					: state === 'confirmed'
+						? 'Confirmed — reading your cards…'
+						: 'Opening…';
 		return (
 			<div className="magi-market-reveal">
 				<div className="magi-market-reveal-wait">
 					<Spinner />
-					<p className="magi-market-field-hint">Opening…</p>
+					<p className="magi-market-field-hint">{waiting}</p>
+					<p className="magi-market-field-hint magi-market-reveal-patience">
+						This takes a few seconds — the cards are already yours.
+					</p>
 				</div>
 			</div>
 		);
