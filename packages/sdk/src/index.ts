@@ -147,7 +147,12 @@ export type {
 	PrepareDeployResponse,
 	CreateDeployerClientOptions
 } from './deployer.js';
-export { createMarketProvider, INDEXER_ROW_CAP, looksTruncated } from './marketProvider.js';
+export {
+	createMarketProvider,
+	INDEXER_ROW_CAP,
+	MARKET_LIST_MAX,
+	looksTruncated
+} from './marketProvider.js';
 export type { MarketProvider } from './marketProvider.js';
 
 /**

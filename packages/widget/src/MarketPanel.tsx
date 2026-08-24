@@ -44,7 +44,7 @@ import { BuyTokenForm } from './actions/BuyTokenForm.js';
 import { MakeBidForm } from './actions/MakeBidForm.js';
 import { useTokenMeta } from './components/useTokenMeta.js';
 import { useCollectionMeta } from './components/useCollectionMeta.js';
-import { looksTruncated } from '@vsc.eco/market-sdk';
+import { looksTruncated, MARKET_LIST_MAX } from '@vsc.eco/market-sdk';
 import { humanizeContractError } from './contractErrors.js';
 import { NftDetails } from './components/NftDetails.js';
 import { ActivityFeed } from './components/ActivityFeed.js';
@@ -704,9 +704,9 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				setBundles(bn);
 				setBuckets(bk);
 				setMintSpots(ms);
-				// Hasura caps every response at 100 rows and ignores a larger
-				// limit, so a full page is indistinguishable from "there is
-				// more". Say so rather than presenting a page as the market.
+				// Reads are paged now, so this only fires when a list actually
+				// reached the ceiling the SDK stops at — not merely when a
+				// single Hasura page came back full.
 				setTruncated(
 					[ls, bn, bk, ms]
 						.map((rows, i) => (looksTruncated(rows) ? ['listings', 'bundles', 'buckets', 'mint spots'][i] : null))
@@ -2003,7 +2003,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 
 					{truncated.length > 0 && (
 						<p className="magi-market-field-hint magi-market-truncated">
-							Showing the first 100 {truncated.join(', ')} — there may be more than fits one page.
+							Showing the first {MARKET_LIST_MAX} {truncated.join(', ')} — there are more than this view reads.
 						</p>
 					)}
 

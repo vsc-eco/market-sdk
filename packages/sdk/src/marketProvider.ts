@@ -324,7 +324,18 @@ const ACTIVITY_COLS =
  * therefore the honest maximum; a fuller bucket needs paging, which the widget
  * does not need yet since it renders odds from what it can see.
  */
-const MAX_BUCKET_ENTRY_ROWS = 100;
+// A bucket holds up to 512 distinct tokens, and the odds shown to a buyer are
+// computed from what we can see — reading only the first hundred published
+// odds that were simply wrong.
+const MAX_BUCKET_ENTRY_ROWS = 512;
+/**
+ * How many rows a browse list will read at most, now that reads are paged.
+ * Not unlimited: a client that walks a hundred pages to render a grid is its
+ * own kind of broken, and the panel says when a list stopped here.
+ */
+export const MARKET_LIST_MAX = 500;
+/** MaxBucketStacks in the contract is 8; a little headroom costs one page. */
+const MaxBucketStacksRows = 16;
 
 /**
  * The row ceiling Hasura enforces on every view. A result of exactly this
@@ -334,9 +345,14 @@ const MAX_BUCKET_ENTRY_ROWS = 100;
  */
 export const INDEXER_ROW_CAP = 100;
 
-/** Did this result come back at the ceiling — i.e. is there probably more? */
-export function looksTruncated(rows: { length: number }, limit = INDEXER_ROW_CAP): boolean {
-	return rows.length >= Math.min(limit, INDEXER_ROW_CAP);
+/**
+ * Did this result stop at the ceiling rather than at the end of the data?
+ *
+ * Reads are paged now, so a full 100-row page no longer means "truncated" —
+ * only reaching MARKET_LIST_MAX does.
+ */
+export function looksTruncated(rows: { length: number }, limit = MARKET_LIST_MAX): boolean {
+	return rows.length >= limit;
 }
 const SWAP_COLS = 'swap_id proposer offered_nft wanted_nft active';
 const RENTAL_COLS = 'rental_id owner nft_contract token_id renter end_block active';
@@ -632,20 +648,67 @@ export function createMarketProvider(
 	 * every restock, so they carry no single indexer_block_height to sort on —
 	 * asking Hasura to order by it would just error.
 	 */
+	/**
+	 * Read up to `want` rows, a page at a time.
+	 *
+	 * Hasura caps EVERY response at 100 rows and ignores a larger `limit`, so
+	 * a single-shot query does not fail when there is more — it just stops.
+	 * That is invisible until a market has more than a hundred of anything,
+	 * at which point it quietly shows a slice and calls it the market.
+	 *
+	 * `orderBy` must be a TOTAL order. `offset` over a partial one is not a
+	 * stable window: rows tied on the sort key can move between pages, so the
+	 * same row comes back twice while another is never seen.
+	 */
+	async function pageAll<TRow>(
+		view: string,
+		cols: string,
+		where: Record<string, unknown>,
+		orderBy: string,
+		want: number
+	): Promise<TRow[]> {
+		const PAGE = Math.min(INDEXER_ROW_CAP, want);
+		const out: TRow[] = [];
+		for (let offset = 0; out.length < want; offset += PAGE) {
+			const q = `query L($w: ${view}_bool_exp, $l: Int, $o: Int){ rows: ${view}(where:$w, limit:$l, offset:$o, order_by:${orderBy}){ ${cols} } }`;
+			let rows: TRow[];
+			try {
+				const d = await gqlFetchFailover<{ rows: TRow[] }>(
+					indexerUrls(),
+					q,
+					{ w: where, l: PAGE, o: offset },
+					fo
+				);
+				rows = d.rows ?? [];
+			} catch {
+				// A failed page returns what we already have rather than
+				// nothing: a partial market beats an empty one.
+				break;
+			}
+			out.push(...rows);
+			// Short page = last page. An exactly-full one is ambiguous and
+			// costs one more request to resolve.
+			if (rows.length < PAGE) break;
+		}
+		return out.slice(0, want);
+	}
+
+	/**
+	 * Like `indexerList` but for the GROUPED aggregate views (bucket entries
+	 * and stacks), which span a listing and every restock and so carry no
+	 * single indexer_block_height to sort on — asking Hasura to order by it
+	 * errors. The caller supplies the key that makes the order total.
+	 */
 	async function indexerListUnordered<TRow, TOut>(
 		view: string,
 		cols: string,
 		where: Record<string, unknown>,
 		limit: number,
-		map: (r: TRow) => TOut
+		map: (r: TRow) => TOut,
+		orderBy = '{}'
 	): Promise<TOut[]> {
-		const q = `query L($w: ${view}_bool_exp, $l: Int){ rows: ${view}(where:$w, limit:$l){ ${cols} } }`;
-		try {
-			const d = await gqlFetchFailover<{ rows: TRow[] }>(indexerUrls(), q, { w: where, l: limit }, fo);
-			return (d.rows ?? []).map(map);
-		} catch {
-			return [];
-		}
+		const rows = await pageAll<TRow>(view, cols, where, orderBy, limit);
+		return rows.map(map);
 	}
 
 	async function indexerList<TRow, TOut>(
@@ -655,18 +718,12 @@ export function createMarketProvider(
 		limit: number,
 		map: (r: TRow) => TOut
 	): Promise<TOut[]> {
-		const q = `query L($w: ${view}_bool_exp, $l: Int){ rows: ${view}(where:$w, limit:$l, order_by:{indexer_block_height:desc}){ ${cols} } }`;
-		try {
-			const d = await gqlFetchFailover<{ rows: TRow[] }>(
-				indexerUrls(),
-				q,
-				{ w: where, l: limit },
-				fo
-			);
-			return (d.rows ?? []).map(map);
-		} catch {
-			return [];
-		}
+		// Newest first, then the view's id column so the order is total —
+		// every COLS list starts with one (listing_id, bucket_id, swap_id…).
+		const idCol = cols.trim().split(/\s+/)[0];
+		const orderBy = `[{indexer_block_height:desc},{${idCol}:asc}]`;
+		const rows = await pageAll<TRow>(view, cols, where, orderBy, limit);
+		return rows.map(map);
 	}
 
 	/**
@@ -739,7 +796,7 @@ export function createMarketProvider(
 					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				f.limit ?? 100,
+				f.limit ?? MARKET_LIST_MAX,
 				mapListing
 			),
 		getListing: async (listingId) => {
@@ -761,7 +818,7 @@ export function createMarketProvider(
 					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapOffer
 			),
 		getAuctions: async (f = {}) => {
@@ -773,7 +830,7 @@ export function createMarketProvider(
 					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapAuction
 			);
 			return hydrateState(rows, 'au', 'auctionId', ['pt'], (it, v) => ({
@@ -790,7 +847,7 @@ export function createMarketProvider(
 					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapBucket
 			),
 		getBucketEntries: (bucketId: number) =>
@@ -799,15 +856,17 @@ export function createMarketProvider(
 				BUCKET_ENTRY_COLS,
 				{ bucket_id: { _eq: bucketId } },
 				MAX_BUCKET_ENTRY_ROWS,
-				mapBucketEntry
+				mapBucketEntry,
+				'[{bucket_id:asc},{stack:asc},{token_id:asc}]'
 			),
 		getBucketStacks: (bucketId: number) =>
 			indexerListUnordered<BucketStackRow, BucketStack>(
 				'magi_market_bucket_stacks',
 				BUCKET_STACK_COLS,
 				{ bucket_id: { _eq: bucketId } },
-				16,
-				mapBucketStack
+				MaxBucketStacksRows,
+				mapBucketStack,
+				'[{bucket_id:asc},{stack:asc}]'
 			),
 		/**
 		 * The NFTs a purchase actually produced, in the order the contract
@@ -824,7 +883,8 @@ export function createMarketProvider(
 				BUCKET_DRAW_COLS,
 				where,
 				f.limit ?? 64,
-				mapBucketDraw
+				mapBucketDraw,
+				'[{bucket_id:asc},{draw_index:asc},{token_id:asc}]'
 			);
 		},
 		/** Completed purchases, newest first. */
@@ -848,7 +908,7 @@ export function createMarketProvider(
 					...(f.seller ? { seller: { _eq: f.seller } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapBundle
 			),
 		getBundleItems: async (bundleId: number) => {
@@ -887,7 +947,7 @@ export function createMarketProvider(
 					...(f.proposer ? { proposer: { _eq: f.proposer } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapSwap
 			),
 		getRentals: (f = {}) =>
@@ -899,7 +959,7 @@ export function createMarketProvider(
 					...(f.renter ? { renter: { _eq: f.renter } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapRental
 			),
 		getMintSpotListings: async (f = {}) => {
@@ -911,7 +971,7 @@ export function createMarketProvider(
 					...(f.nftContract ? { nft_contract: { _eq: f.nftContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapMintSpot
 			);
 			return hydrateState(rows, 'msp', 'listingId', ['pt', 'p'], (it, v) => ({
@@ -929,7 +989,7 @@ export function createMarketProvider(
 					...(f.tokenContract ? { token_contract: { _eq: f.tokenContract } } : {}),
 					...activeWhere(f.activeOnly)
 				},
-				100,
+				MARKET_LIST_MAX,
 				mapTokenListing
 			),
 		getPaymentTokens: (f = {}) =>
@@ -937,7 +997,7 @@ export function createMarketProvider(
 				'magi_market_payment_tokens',
 				PAYMENT_TOKEN_COLS,
 				{ ...activeWhere(f.activeOnly) },
-				100,
+				MARKET_LIST_MAX,
 				mapPaymentToken
 			)
 	};
