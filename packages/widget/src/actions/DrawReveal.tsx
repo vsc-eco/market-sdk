@@ -185,12 +185,19 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 									<img src={magiSvg} alt="" />
 								</div>
 								<div className="magi-market-card-face">
-									{img ? (
-										<img src={img} alt={`#${d.tokenId}`} loading="lazy" />
-									) : (
-										<img src={magiSvg} alt={`#${d.tokenId}`} className="magi-market-tile-fallback-img" />
-									)}
-									{isRare && <span className="magi-market-card-hit">Guaranteed</span>}
+									{/* Same art treatment as every other NFT in the widget: a
+									    square box with the id underneath, rather than the
+									    picture cropped edge-to-edge with the id laid over it.
+									    A pull should look like the card it is going to be in
+									    your wallet. */}
+									<div className="magi-market-card-art">
+										{img ? (
+											<img src={img} alt={`#${d.tokenId}`} loading="lazy" />
+										) : (
+											<img src={magiSvg} alt={`#${d.tokenId}`} className="magi-market-tile-fallback-img" />
+										)}
+										{isRare && <span className="magi-market-card-hit">Guaranteed</span>}
+									</div>
 									<span className="magi-market-card-id">#{d.tokenId}</span>
 								</div>
 							</div>
