@@ -244,7 +244,18 @@ type Sheet =
 	| { kind: 'rent'; rental: RentalListing }
 	| { kind: 'admin'; nftContract?: string }
 	| { kind: 'offer'; listing?: Listing; nftContract?: string; tokenId?: string }
-	| { kind: 'nftDetails'; nftContract: string; tokenId: string }
+	| {
+			kind: 'nftDetails';
+			nftContract: string;
+			tokenId: string;
+			/**
+			 * Where closing should land. The panel holds ONE sheet, so opening
+			 * an NFT from inside a sale or bundle replaced it — and closing
+			 * then dropped you at the top of the market instead of back in the
+			 * thing you were reading.
+			 */
+			returnTo?: Sheet;
+	  }
 	| null;
 
 /**
@@ -800,6 +811,23 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		};
 		return map[k] ?? 'Transaction';
 	};
+
+	/**
+	 * Open an NFT, remembering the sheet it was opened from.
+	 *
+	 * Called from inside a sale, bundle or reveal, where the thing you were
+	 * reading is itself a sheet — without this, closing the NFT dropped you at
+	 * the top of the market rather than back where you were.
+	 */
+	const openNft = (nftContract: string, tokenId: string) =>
+		setSheet((cur) => ({
+			kind: 'nftDetails',
+			nftContract,
+			tokenId,
+			// Never return to another NFT: two details deep is a chain nobody
+			// asked for, and the second close should still land somewhere real.
+			returnTo: cur && cur.kind !== 'nftDetails' ? cur : undefined
+		}));
 
 	const success = (tx: string) => {
 		onSuccess?.(tx);
@@ -1579,7 +1607,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							.map((n, i) => (n > 0 && i > 0 ? i : -1))
 							.filter((i) => i >= 0)}
 						onClose={() => setSheet(null)}
-						onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+						onOpenNft={(nftContract, tokenId) => openNft(nftContract, tokenId)}
 					/>
 				</PanelView>
 			)}
@@ -1607,7 +1635,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						canceling={canceling === `bundle:${sheet.bundle.bundleId}`}
 						onBuy={() => setSheet({ kind: 'buyBundle', bundle: sheet.bundle })}
 						onCancel={() => cancelListing('bundle', sheet.bundle.bundleId)}
-						onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+						onOpenNft={(nftContract, tokenId) => openNft(nftContract, tokenId)}
 					/>
 				</PanelView>
 			)}
@@ -1627,7 +1655,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						onDraw={() => drawFromBucket(sheet.bucket, 'single')}
 						onBuyPack={() => drawFromBucket(sheet.bucket, 'pack')}
 						onCancel={() => cancelListing('bucket', sheet.bucket.bucketId)}
-						onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+						onOpenNft={(nftContract, tokenId) => openNft(nftContract, tokenId)}
 					/>
 				</PanelView>
 			)}
@@ -1664,7 +1692,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 					config={config}
 					nftContract={sheet.nftContract}
 					tokenId={sheet.tokenId}
-					onClose={() => setSheet(null)}
+					onClose={() => setSheet(sheet.returnTo ?? null)}
 				/>
 			)}
 
@@ -1827,7 +1855,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 							formatPrice={(token, micro) =>
 								token && micro ? `${tokenMeta.format(token, micro)} ${tokenMeta.symbol(token)}` : null
 							}
-							onOpenNft={(nftContract, tokenId) => setSheet({ kind: 'nftDetails', nftContract, tokenId })}
+							onOpenNft={(nftContract, tokenId) => openNft(nftContract, tokenId)}
 							emptyLabel={
 								activity.length > 0
 									? 'Nothing matches these filters.'

@@ -255,7 +255,12 @@ export function BucketCard({
 			) : entries.length === 0 ? (
 				<div className="magi-market-state">Contents not indexed yet.</div>
 			) : (
-				entries
+				// The tiles lost their grid when this card stopped being wrapped
+				// in a CollectionGroup — which supplied one — so they stacked one
+				// per row. Two per row: these carry a picture, a count and the
+				// odds, and that does not survive being squeezed narrower.
+				<div className="magi-market-grid magi-market-bucketcard-grid">
+				{entries
 					.slice()
 					.sort((a, b) => a.stack - b.stack || b.amountLeft - a.amountLeft)
 					.map((e) => (
@@ -266,7 +271,8 @@ export function BucketCard({
 							chance={chanceOf(e)}
 							onOpen={() => onOpenNft(bucket.nftContract, e.tokenId)}
 						/>
-					))
+					))}
+				</div>
 			)}
 		</div>
 	);

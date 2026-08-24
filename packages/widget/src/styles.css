@@ -2795,3 +2795,9 @@
 	padding: 0.4rem 0.9rem;
 }
 .magi-market-reveal-patience { opacity: 0.7; margin: 0; }
+
+/* Two per row in a sale's contents: each tile carries a picture, how many are
+   left and the odds, which does not survive being squeezed narrower. */
+.magi-market-bucketcard-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
