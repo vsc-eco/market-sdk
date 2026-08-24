@@ -186,6 +186,7 @@ interface BundleRow {
 interface BucketRow {
 	bucket_id: unknown;
 	name?: unknown;
+	cover_token_id?: unknown;
 	seller: string;
 	nft_contract: string;
 	payment_token: string;
@@ -311,7 +312,7 @@ const BUNDLE_COLS = 'bundle_id seller nft_contract count price active';
 const BUCKET_COLS =
 	'bucket_id name seller nft_contract payment_token price_per_draw price_per_pack pack_draws ' +
 	'expiration_block fee_bps royalty_bps royalty_recipient entry_count units_stocked units_left ' +
-	'units_left_reported units_drawn units_dropped purchases sold_out delisted active ' +
+	'units_left_reported units_drawn units_dropped purchases sold_out delisted active cover_token_id ' +
 	'indexer_block_height indexer_ts';
 const BUCKET_ENTRY_COLS = 'bucket_id token_id stack amount_stocked amount_drawn amount_dropped amount_left';
 const BUCKET_STACK_COLS = 'bucket_id stack units_stocked units_left distinct_tokens';
@@ -435,6 +436,7 @@ function mapBucket(r: BucketRow): BucketListing {
 	return {
 		bucketId: num(r.bucket_id),
 		name: r.name ? str(r.name) : undefined,
+		coverTokenId: r.cover_token_id ? str(r.cover_token_id) : undefined,
 		seller: r.seller,
 		nftContract: r.nft_contract,
 		paymentToken: r.payment_token,
@@ -900,8 +902,8 @@ export function createMarketProvider(
 				mapActivity
 			);
 		},
-		getBundles: (f = {}) =>
-			indexerList<BundleRow, BundleListing>(
+		getBundles: async (f = {}) => {
+			const rows = await indexerList<BundleRow, BundleListing>(
 				'magi_market_bundles',
 				BUNDLE_COLS,
 				{
@@ -910,7 +912,28 @@ export function createMarketProvider(
 				},
 				MARKET_LIST_MAX,
 				mapBundle
-			),
+			);
+			// `bundle_listed` carries a COUNT, not the ids — so a bundle from
+			// the view has placeholder items and no cover art. The ids are in
+			// contract state, so read the first slot of every bundle in one
+			// call rather than leaving each one blank.
+			if (rows.length === 0) return rows;
+			const keys = rows.map((b) => `bnd|${b.bundleId}|0_ti`);
+			const q = `query S($c:String!,$k:[String!]!){ getStateByKeys(contractId:$c,keys:$k,encoding:"string") }`;
+			try {
+				const data = await gqlFetchFailover<{
+					getStateByKeys: Record<string, string | null> | null;
+				}>(nodeUrls(), q, { c: cid(), k: keys }, fo);
+				const st = data.getStateByKeys ?? {};
+				for (const b of rows) {
+					const first = st[`bnd|${b.bundleId}|0_ti`];
+					if (first && b.items.length > 0) b.items[0] = { ...b.items[0], tokenId: first };
+				}
+			} catch {
+				/* cover art is a bonus — the bundle still lists without it */
+			}
+			return rows;
+		},
 		getBundleItems: async (bundleId: number) => {
 			// Bundles cap at 20 items; read all candidate slots in one
 			// getStateByKeys and stop at the first empty token id. uint64

@@ -228,6 +228,8 @@ export interface BucketListing {
 	bucketId: number;
 	/** The seller's name for the sale; empty for one listed before names existed. */
 	name?: string;
+	/** First NFT the seller stocked — the sale's cover art. */
+	coverTokenId?: string;
 	seller: string;
 	nftContract: string;
 	paymentToken: string;

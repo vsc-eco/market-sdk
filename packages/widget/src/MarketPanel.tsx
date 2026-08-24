@@ -622,12 +622,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 			return [
 				...listings.map((l) => ({ nftContract: l.nftContract, tokenId: l.tokenId })),
 				...mintSpots.map((m) => ({ nftContract: m.nftContract, tokenId: m.tokenId })),
-				// A bundle's tile shows its first item. Buckets deliberately
-				// have none: showing one card from a random draw would suggest
-				// it is the card you get.
+				// Cover art for the formats that are not a single NFT: a bundle
+				// shows its first item, a mystery sale the first card stocked.
 				...bundles
-					.filter((b) => b.items.length > 0)
-					.map((b) => ({ nftContract: b.nftContract, tokenId: b.items[0].tokenId }))
+					.filter((b) => b.items[0]?.tokenId)
+					.map((b) => ({ nftContract: b.nftContract, tokenId: b.items[0].tokenId })),
+				...buckets
+					.filter((b) => b.coverTokenId)
+					.map((b) => ({ nftContract: b.nftContract, tokenId: b.coverTokenId as string }))
 			];
 		if (tab === 'offers')
 			return offers
@@ -636,7 +638,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		if (tab === 'auctions') return auctions.map((a) => ({ nftContract: a.nftContract, tokenId: a.tokenId }));
 		if (tab === 'rentals') return rentals.map((r) => ({ nftContract: r.nftContract, tokenId: r.tokenId }));
 		return [];
-	}, [tab, listings, offers, auctions, mintSpots, bundles, rentals]);
+	}, [tab, listings, offers, auctions, mintSpots, bundles, buckets, rentals]);
 
 	// Explore resolves images for exactly the page that's rendered, deduped
 	// by token (the same token held by two accounts is two tiles, one image).
@@ -1118,6 +1120,8 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				kind: 'random',
 				nftContract: b.nftContract,
 				seller: b.seller,
+				// The first NFT the seller stocked, as the sale's cover.
+				tokenId: b.coverTokenId,
 				paymentToken: b.paymentToken,
 				// Whichever way in is enabled — a bucket can sell single draws,
 				// packs, or both, and the tile shows the cheaper entry price.
