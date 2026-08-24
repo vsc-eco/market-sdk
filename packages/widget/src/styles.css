@@ -2416,7 +2416,8 @@
 	border: 1px solid var(--magi-card-border);
 }
 .magi-market-card-back {
-	background:
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image:
 		repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 6px, transparent 6px 12px),
 		linear-gradient(160deg, var(--magi-accent) 0%, #1b1e2b 85%);
 }
@@ -2426,7 +2427,14 @@
    in the widget reads as a different object. */
 .magi-market-card-face {
 	transform: rotateY(180deg);
-	background: var(--magi-card-bg, #171a24);
+	/* OPAQUE base under the themed surface. Every card/tile background token
+	   in the theme is rgba-based, so a face painted only with them is
+	   see-through — and the card's own back, sitting directly behind it, bled
+	   through the front of a flipped card as a second, larger, faded logo.
+	   `backface-visibility` is not enough on its own; nothing may show through
+	   a card that is meant to be face-up. */
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image: var(--magi-card-bg);
 	flex-direction: column;
 	justify-content: flex-start;
 	padding: 0.4rem;
@@ -2436,7 +2444,8 @@
 	position: relative;
 	width: 100%;
 	aspect-ratio: 1 / 1;
-	background: var(--magi-field-bg);
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image: linear-gradient(var(--magi-field-bg), var(--magi-field-bg));
 	border-radius: 8px;
 	overflow: hidden;
 	display: flex;
