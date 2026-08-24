@@ -187,6 +187,7 @@ interface BucketRow {
 	bucket_id: unknown;
 	name?: unknown;
 	cover_token_id?: unknown;
+	cover_token_ids?: unknown;
 	seller: string;
 	nft_contract: string;
 	payment_token: string;
@@ -312,7 +313,7 @@ const BUNDLE_COLS = 'bundle_id seller nft_contract count price active';
 const BUCKET_COLS =
 	'bucket_id name seller nft_contract payment_token price_per_draw price_per_pack pack_draws ' +
 	'expiration_block fee_bps royalty_bps royalty_recipient entry_count units_stocked units_left ' +
-	'units_left_reported units_drawn units_dropped purchases sold_out delisted active cover_token_id ' +
+	'units_left_reported units_drawn units_dropped purchases sold_out delisted active cover_token_id cover_token_ids ' +
 	'indexer_block_height indexer_ts';
 const BUCKET_ENTRY_COLS = 'bucket_id token_id stack amount_stocked amount_drawn amount_dropped amount_left';
 const BUCKET_STACK_COLS = 'bucket_id stack units_stocked units_left distinct_tokens';
@@ -437,6 +438,9 @@ function mapBucket(r: BucketRow): BucketListing {
 		bucketId: num(r.bucket_id),
 		name: r.name ? str(r.name) : undefined,
 		coverTokenId: r.cover_token_id ? str(r.cover_token_id) : undefined,
+		coverTokenIds: Array.isArray(r.cover_token_ids)
+			? (r.cover_token_ids as unknown[]).map((t) => str(t)).filter(Boolean)
+			: undefined,
 		seller: r.seller,
 		nftContract: r.nft_contract,
 		paymentToken: r.payment_token,
@@ -918,7 +922,12 @@ export function createMarketProvider(
 			// contract state, so read the first slot of every bundle in one
 			// call rather than leaving each one blank.
 			if (rows.length === 0) return rows;
-			const keys = rows.map((b) => `bnd|${b.bundleId}|0_ti`);
+			// Slots 0..4, not just 0: the first item may have no artwork, and
+			// the client needs somewhere to fall back to.
+			const COVER_SLOTS = 5;
+			const keys = rows.flatMap((b) =>
+				Array.from({ length: COVER_SLOTS }, (_, i) => `bnd|${b.bundleId}|${i}_ti`)
+			);
 			const q = `query S($c:String!,$k:[String!]!){ getStateByKeys(contractId:$c,keys:$k,encoding:"string") }`;
 			try {
 				const data = await gqlFetchFailover<{
@@ -926,8 +935,10 @@ export function createMarketProvider(
 				}>(nodeUrls(), q, { c: cid(), k: keys }, fo);
 				const st = data.getStateByKeys ?? {};
 				for (const b of rows) {
-					const first = st[`bnd|${b.bundleId}|0_ti`];
-					if (first && b.items.length > 0) b.items[0] = { ...b.items[0], tokenId: first };
+					for (let i = 0; i < COVER_SLOTS && i < b.items.length; i++) {
+						const ti = st[`bnd|${b.bundleId}|${i}_ti`];
+						if (ti) b.items[i] = { ...b.items[i], tokenId: ti };
+					}
 				}
 			} catch {
 				/* cover art is a bonus — the bundle still lists without it */

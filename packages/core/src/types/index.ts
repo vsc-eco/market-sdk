@@ -230,6 +230,11 @@ export interface BucketListing {
 	name?: string;
 	/** First NFT the seller stocked — the sale's cover art. */
 	coverTokenId?: string;
+	/**
+	 * The first few stocked tokens, in order. Not every NFT has artwork, so a
+	 * client walks these and uses the first that resolves to an image.
+	 */
+	coverTokenIds?: string[];
 	seller: string;
 	nftContract: string;
 	paymentToken: string;

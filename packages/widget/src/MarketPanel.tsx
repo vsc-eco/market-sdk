@@ -624,12 +624,18 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				...mintSpots.map((m) => ({ nftContract: m.nftContract, tokenId: m.tokenId })),
 				// Cover art for the formats that are not a single NFT: a bundle
 				// shows its first item, a mystery sale the first card stocked.
-				...bundles
-					.filter((b) => b.items[0]?.tokenId)
-					.map((b) => ({ nftContract: b.nftContract, tokenId: b.items[0].tokenId })),
-				...buckets
-					.filter((b) => b.coverTokenId)
-					.map((b) => ({ nftContract: b.nftContract, tokenId: b.coverTokenId as string }))
+				...bundles.flatMap((b) =>
+					b.items
+						.map((i) => i.tokenId)
+						.filter(Boolean)
+						.map((tokenId) => ({ nftContract: b.nftContract, tokenId }))
+				),
+				...buckets.flatMap((b) =>
+					(b.coverTokenIds ?? (b.coverTokenId ? [b.coverTokenId] : [])).map((tokenId) => ({
+						nftContract: b.nftContract,
+						tokenId
+					}))
+				)
 			];
 		if (tab === 'offers')
 			return offers
@@ -1109,6 +1115,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				nftContract: b.nftContract,
 				seller: b.seller,
 				tokenId: b.items[0]?.tokenId,
+				coverCandidates: b.items.map((i) => i.tokenId).filter(Boolean),
 				paymentToken: b.paymentToken,
 				price: b.price,
 				indexedAt: (b as { indexedAt?: string }).indexedAt,
@@ -1122,6 +1129,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				seller: b.seller,
 				// The first NFT the seller stocked, as the sale's cover.
 				tokenId: b.coverTokenId,
+				coverCandidates: b.coverTokenIds ?? (b.coverTokenId ? [b.coverTokenId] : []),
 				paymentToken: b.paymentToken,
 				// Whichever way in is enabled — a bucket can sell single draws,
 				// packs, or both, and the tile shows the cheaper entry price.

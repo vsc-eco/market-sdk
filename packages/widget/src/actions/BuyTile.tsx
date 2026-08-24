@@ -11,6 +11,7 @@ export interface BuyItem {
 	nftContract: string;
 	seller: string;
 	tokenId?: string;
+	coverCandidates?: string[];
 	paymentToken: string;
 	price: string;
 	indexedAt?: string;
@@ -86,10 +87,22 @@ export function BuyTile({
 
 		const mine = isSelf(it.seller);
 		const sym = tokenMeta.symbol(it.paymentToken);
+		// Walk the candidates and take the first that actually has art. `get`
+		// returns undefined while a lookup is still in flight and null once it
+		// has resolved to nothing, so only a real URL ends the search — a tile
+		// does not settle for the logo just because the first image is slow.
+		const cover =
+			(it.tokenId ? nftImages.get(it.nftContract, it.tokenId) : null) ??
+			(it.coverCandidates ?? []).reduce<string | null | undefined>(
+				(found, t) => found ?? nftImages.get(it.nftContract, t),
+				undefined
+			) ??
+			null;
+
 		const common = {
 			badge: BUY_KIND_LABEL[it.kind],
 			badgeTone: it.kind === 'single' ? undefined : (it.kind as 'bundle' | 'random' | 'mint'),
-			imageUrl: it.tokenId ? nftImages.get(it.nftContract, it.tokenId) : null,
+			imageUrl: cover,
 			tokenId: it.tokenId ?? ''
 		};
 
