@@ -2,13 +2,12 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { MagiConfig } from '@vsc.eco/market-sdk';
 import {
 	createNftClient,
-	MAINNET_CONFIG as TOKEN_MAINNET,
-	TESTNET_CONFIG as TOKEN_TESTNET,
 	extractImageUrl,
 	buildBaseUriImage,
 	type NftCollection,
 	type NftMetadata
 } from '@vsc.eco/token-sdk';
+import { tokenConfigFrom } from './tokenConfig.js';
 import { Modal } from './Modal.js';
 import { Spinner } from './Spinner.js';
 import magiSvg from '../assets/magi.svg';
@@ -31,7 +30,7 @@ const CORE_KEYS = new Set(['name', 'description', 'image']);
  */
 export function NftDetails({ config, nftContract, tokenId, onClose }: NftDetailsProps) {
 	const tokenConfig = useMemo(
-		() => (config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
+		() => tokenConfigFrom(config),
 		[config.network]
 	);
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);

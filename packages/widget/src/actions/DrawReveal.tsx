@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BucketDraw, BucketListing, MarketClient } from '@vsc.eco/market-sdk';
-import {
-	createNftClient,
-	MAINNET_CONFIG as TOKEN_MAINNET,
-	TESTNET_CONFIG as TOKEN_TESTNET,
-	type NftItem
+import { createNftClient, 	type NftItem
 } from '@vsc.eco/token-sdk';
+import { tokenConfigFrom } from '../components/tokenConfig.js';
 import { Spinner } from '../components/Spinner.js';
 import { useTxStatus } from '../components/useTxStatus.js';
 import magiSvg from '../assets/magi.svg';
@@ -88,7 +85,7 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 	// Art for the drawn tokens, once we know what they are. Same resolver the
 	// bucket card uses, so a revealed card looks like the one in the stack.
 	const tokenConfig = useMemo(
-		() => (client.config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
+		() => tokenConfigFrom(client.config),
 		[client.config.network]
 	);
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);
@@ -153,7 +150,7 @@ export function DrawReveal({ client, bucket, txId, rareStacks, onClose, onOpenNf
 					<Spinner />
 					<p className="magi-market-field-hint">{waiting}</p>
 					<p className="magi-market-field-hint magi-market-reveal-patience">
-						This takes a few seconds — the cards are already yours.
+						This takes a few seconds — the cards are almost yours.
 					</p>
 				</div>
 			</div>

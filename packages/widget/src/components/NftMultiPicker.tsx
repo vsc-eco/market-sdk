@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MagiConfig } from '@vsc.eco/market-sdk';
-import {
-	createNftClient,
-	MAINNET_CONFIG as TOKEN_MAINNET,
-	TESTNET_CONFIG as TOKEN_TESTNET,
-	type NftItem
+import { createNftClient, 	type NftItem
 } from '@vsc.eco/token-sdk';
+import { tokenConfigFrom } from './tokenConfig.js';
 import { Spinner } from './Spinner.js';
 import { useCollectionMeta } from './useCollectionMeta.js';
 import { CollectionGroup } from './CollectionGroup.js';
@@ -267,7 +264,7 @@ export function NftMultiPicker({
 	overLimitNote
 }: NftMultiPickerProps) {
 	const tokenConfig = useMemo(
-		() => (config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
+		() => tokenConfigFrom(config),
 		[config.network]
 	);
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);

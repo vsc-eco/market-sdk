@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BucketEntry, BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
-import {
-	createNftClient,
-	MAINNET_CONFIG as TOKEN_MAINNET,
-	TESTNET_CONFIG as TOKEN_TESTNET,
-	type NftItem
+import { createNftClient, 	type NftItem
 } from '@vsc.eco/token-sdk';
+import { tokenConfigFrom } from '../components/tokenConfig.js';
 import { Spinner } from '../components/Spinner.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
 import magiSvg from '../assets/magi.svg';
@@ -112,7 +109,7 @@ export function BucketCard({
 }: BucketCardProps) {
 	const tokenMeta = useTokenMeta(client.config);
 	const tokenConfig = useMemo(
-		() => (client.config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
+		() => tokenConfigFrom(client.config),
 		[client.config.network]
 	);
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);
