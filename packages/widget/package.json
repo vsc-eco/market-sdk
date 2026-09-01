@@ -1,11 +1,11 @@
 {
   "name": "@vsc.eco/market-widget",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publishConfig": {
     "access": "public"
   },
   "license": "MIT",
-  "description": "Embeddable Magi NFT-marketplace panel \u2014 React component + web component",
+  "description": "Embeddable Magi NFT-marketplace panel — React component + web component",
   "keywords": [
     "hive",
     "vsc",
