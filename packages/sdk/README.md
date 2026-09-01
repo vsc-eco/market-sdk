@@ -22,6 +22,12 @@ await market.sell('alice', {
   tokenId: '1', amount: 1,
   paymentToken: 'vsc1...token', pricePerUnit: '10.000'
 });
+
+// accepting a buy offer needs the same authorization: approve + acceptOffer
+await market.acceptOffer('alice', {
+  offerId: 7, amount: 1,
+  nftContract: 'vsc1...nft', tokenId: '1'
+});
 ```
 
 `TESTNET_CONFIG` is pre-wired to the deployed testnet marketplace
@@ -37,7 +43,8 @@ await market.sell('alice', {
 - **Orchestrator** — `broadcast` (single) / `broadcastBatch` (chunked, one
   signature per `chunkSize` ops, a Hive block of spacing between chunks).
   The cross-contract helpers (`sell`, `auction`, `rental`,
-  `mintSpotListing`, `buyWithPayment`) emit the approval leg + the market
+  `mintSpotListing`, `acceptOffer`, `acceptCollectionOffer`,
+  `buyWithPayment`) emit the approval leg + the market
   leg and run them through `broadcastBatch`. Same Aioha
   (`vscCallContract` → `signAndBroadcastTx`) / custom `onBroadcast`
   fallback chain as token-sdk.

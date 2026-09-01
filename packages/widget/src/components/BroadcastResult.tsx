@@ -1,7 +1,14 @@
 import { useState } from 'react';
+import type { MagiConfig } from '@vsc.eco/market-sdk';
+import { useTxStatus, type TxState } from './useTxStatus.js';
 
 interface BroadcastResultProps {
 	txId: string;
+	/**
+	 * Enables the live status line. Without it this stays what it was: a
+	 * receipt with the id on it.
+	 */
+	config?: MagiConfig;
 	/**
 	 * Override the explorer base URL. Defaults to vsc.techcoderx.com because
 	 * that's the only public Magi block explorer with stable transaction
@@ -16,10 +23,24 @@ interface BroadcastResultProps {
  * TokenTransfer, TokenBurn) so the affordances and styling stay
  * identical regardless of which path produced the tx.
  */
+const STATE_TEXT: Record<TxState, string> = {
+	pending: 'Waiting for the network…',
+	included: 'In a block — finalising…',
+	confirmed: 'Confirmed — updating the market…',
+	indexed: 'Confirmed',
+	failed: 'Failed on chain',
+	unknown: 'Still not visible — check the explorer'
+};
+
 export function BroadcastResult({
 	txId,
+	config,
 	explorerBase = 'https://vsc.techcoderx.com'
 }: BroadcastResultProps) {
+	// Broadcasting only means the node took it. Without this the widget said
+	// "Broadcast:" and stopped, so whether it actually worked was a question
+	// you answered by refreshing or opening a block explorer.
+	const { state, watching } = useTxStatus(config as MagiConfig, config ? txId : null);
 	const [copied, setCopied] = useState(false);
 	const explorerUrl = `${explorerBase.replace(/\/$/, '')}/tx/${txId}`;
 	const shortId = txId.length > 18 ? `${txId.slice(0, 8)}…${txId.slice(-6)}` : txId;
@@ -48,8 +69,18 @@ export function BroadcastResult({
 	}
 
 	return (
-		<div className="magi-market-success">
-			<span className="magi-market-success-label">Broadcast:</span>
+		<div className={`magi-market-success${config ? ` tx-${state}` : ''}`}>
+			<span className="magi-market-success-label">
+				{config ? (
+					<>
+						{watching && <span className="magi-market-tx-spin" aria-hidden="true" />}
+						{state === 'indexed' && <span className="magi-market-tx-tick" aria-hidden="true">✓</span>}
+						{STATE_TEXT[state]}
+					</>
+				) : (
+					'Broadcast:'
+				)}
+			</span>
 			<code className="magi-market-success-tx" title={txId}>
 				{shortId}
 			</code>

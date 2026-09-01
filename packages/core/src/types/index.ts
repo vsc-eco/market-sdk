@@ -177,7 +177,7 @@ export interface Listing extends Indexed {
 	payoutMode?: '' | 'default' | 'unmap';
 	payoutL1Address?: string;
 	/** F2 DEX-routed settlement opt-in. */
-	dexPool?: string;
+	dexStack?: string;
 	settleToken?: string;
 	minSettleOut?: string;
 }
@@ -215,6 +215,79 @@ export interface Auction extends Indexed {
 }
 
 /** A single-collection atomic bundle listing. */
+/**
+ * A bucket as the indexer sees it: a fixed-price sale where the CONTRACT picks
+ * which unit the buyer gets.
+ *
+ * `unitsLeft` is derived from the event log (stocked − drawn − dropped) so it
+ * accounts for restocks and for stock that went stale. `unitsLeftReported` is
+ * the contract's own figure at the most recent purchase — a checkpoint, not a
+ * live value; the two diverge legitimately after a restock.
+ */
+export interface BucketListing {
+	bucketId: number;
+	/** The seller's name for the sale; empty for one listed before names existed. */
+	name?: string;
+	/** First NFT the seller stocked — the sale's cover art. */
+	coverTokenId?: string;
+	/**
+	 * The first few stocked tokens, in order. Not every NFT has artwork, so a
+	 * client walks these and uses the first that resolves to an image.
+	 */
+	coverTokenIds?: string[];
+	seller: string;
+	nftContract: string;
+	paymentToken: string;
+	/** "0" when single draws are disabled. */
+	pricePerDraw: string;
+	/** "0" when pack sales are disabled. */
+	pricePerPack: string;
+	/** Draws per stack, e.g. [4,1] = 4 commons + 1 guaranteed rare. */
+	packDraws: number[];
+	/** Cards in one pack — the sum of packDraws. 0 when packs are off. */
+	packSize: number;
+	expirationBlock: number;
+	feeBps: number;
+	royaltyBps: number;
+	royaltyRecipient: string;
+	entryCount: number;
+	unitsStocked: number;
+	unitsLeft: number;
+	unitsLeftReported: number | null;
+	unitsDrawn: number;
+	unitsDropped: number;
+	purchases: number;
+	soldOut: boolean;
+	delisted: boolean;
+	active: boolean;
+}
+
+/** One token in a bucket, with what is still drawable. */
+export interface BucketEntry {
+	bucketId: number;
+	tokenId: string;
+	stack: number;
+	amountStocked: number;
+	amountDrawn: number;
+	amountDropped: number;
+	amountLeft: number;
+}
+
+/**
+ * Units remaining in one stack.
+ *
+ * Worth reading before offering a pack: a bucket with guaranteed slots drains
+ * UNEVENLY — the guaranteed stack empties first and strands the rest — so the
+ * grand total can look healthy while the next pack cannot actually be filled.
+ */
+export interface BucketStack {
+	bucketId: number;
+	stack: number;
+	unitsStocked: number;
+	unitsLeft: number;
+	distinctTokens: number;
+}
+
 export interface BundleListing {
 	bundleId: number;
 	seller: string;
@@ -311,4 +384,46 @@ export interface MarketInfo {
 	feeBps: number;
 	feeRecipient: string;
 	paused: boolean;
+}
+
+/** One NFT the contract picked and delivered — the row a pack reveal reads. */
+export interface BucketDraw {
+	bucketId: number;
+	buyer: string;
+	tokenId: string;
+	/** Which stack it came out of. */
+	stack: number;
+	/** Position within the purchase, so a pack reveals in the drawn order. */
+	drawIndex: number;
+	txId?: string;
+	at?: string;
+}
+
+/** What kind of thing happened, for the activity feed. */
+export type ActivityKind =
+	| 'bought'
+	| 'swept'
+	| 'bundleBought'
+	| 'bucketPurchase'
+	| 'mintSpotBought';
+
+/**
+ * One thing that happened on the market, normalised across event tables so a
+ * single feed can render them. Deliberately shallow: the feed shows who, what,
+ * how much and when, and links out for anything deeper.
+ */
+export interface ActivityEvent {
+	kind: ActivityKind;
+	/** Buyer for every kind currently mapped. */
+	actor: string;
+	nftContract?: string;
+	tokenId?: string;
+	/** Micro-units; absent when the event does not carry a price. */
+	price?: string;
+	paymentToken?: string;
+	/** Item count — units bought, listings swept, NFTs in a bundle. */
+	count?: number;
+	txId?: string;
+	at?: string;
+	blockHeight?: number;
 }

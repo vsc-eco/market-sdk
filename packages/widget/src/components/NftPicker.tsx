@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MagiConfig } from '@vsc.eco/market-sdk';
-import {
-	createNftClient,
-	MAINNET_CONFIG as TOKEN_MAINNET,
-	TESTNET_CONFIG as TOKEN_TESTNET,
-	type NftItem
+import { createNftClient, 	type NftItem
 } from '@vsc.eco/token-sdk';
+import { tokenConfigFrom } from './tokenConfig.js';
 import { Spinner } from './Spinner.js';
 import magiSvg from '../assets/magi.svg';
 
@@ -101,7 +98,7 @@ function NftTile({
  */
 export function NftPicker({ config, username, value, onChange, label = 'NFT', disabled, filterItem, emptyHint }: NftPickerProps) {
 	const tokenConfig = useMemo(
-		() => (config.network === 'vsc-testnet' ? TOKEN_TESTNET : TOKEN_MAINNET),
+		() => tokenConfigFrom(config),
 		[config.network]
 	);
 	const nft = useMemo(() => createNftClient({ config: tokenConfig }), [tokenConfig]);
@@ -149,6 +146,17 @@ export function NftPicker({ config, username, value, onChange, label = 'NFT', di
 		[items, filterItem]
 	);
 
+	/**
+	 * Keyed by the eligible set's CONTENT, not its identity: `filterItem` is
+	 * typically an inline arrow, so `eligible` is a fresh array every render and
+	 * an identity-keyed effect re-runs forever (resolve → setImages → render →
+	 * resolve). Same fix as NftMultiPicker.
+	 */
+	const eligibleKey = useMemo(
+		() => eligible.map((i) => `${i.contractId}:${i.tokenId}`).join('|'),
+		[eligible]
+	);
+
 	// Resolve images ONLY for the items actually shown (the eligible set).
 	// `resolveNftImages` fetches per-token props via one `getStateByKeys`
 	// per contract — resolving the full wallet (which can be 1000+ tokens
@@ -174,7 +182,8 @@ export function NftPicker({ config, username, value, onChange, label = 'NFT', di
 		return () => {
 			cancelled = true;
 		};
-	}, [nft, eligible]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by value, see above
+	}, [nft, eligibleKey]);
 
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase();

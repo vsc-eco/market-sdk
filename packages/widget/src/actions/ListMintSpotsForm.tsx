@@ -117,7 +117,7 @@ export function ListMintSpotsForm({
 		>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : step === 1 ? (

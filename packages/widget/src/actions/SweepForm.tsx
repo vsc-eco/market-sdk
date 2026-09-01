@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Listing, MarketClient } from '@vsc.eco/market-sdk';
 import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
@@ -27,15 +27,19 @@ export interface SweepFormProps {
  * `maxTotal` budget and buy them all in one tx via `sweep`. The
  * contract enforces `maxTotal` itself (sum of pricePerUnit × amount
  * across all listingIds ≤ maxTotal) so the buyer is protected against
- * any seller updating their listing mid-flight. All listings must
- * share a single nftContract AND a single paymentToken (contract
- * requirement).
+ * any seller updating their listing mid-flight.
+ *
+ * All listings must share a single nftContract (the contract checks it) and
+ * a single paymentToken (it does NOT — `maxTotal` is one bare number, so a
+ * mixed-token sweep would total two currencies into it and pull both. The
+ * one-token filter here is what keeps the cap meaningful).
  */
 export function SweepForm({ client, username, listings, defaultNftContract, onSuccess, onClose }: SweepFormProps) {
 	const tokenMeta = useTokenMeta(client.config);
 	const collMeta = useCollectionMeta(client.config);
 
 	const [nftContract, setNftContract] = useState(defaultNftContract ?? '');
+	const [payToken, setPayToken] = useState('');
 	const [maxTotal, setMaxTotal] = useState('');
 	const [submitting, setSubmitting] = useState(false);
 	const [txId, setTxId] = useState<string | null>(null);
@@ -56,18 +60,44 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 		[listings, meNorm]
 	);
 
+	// One sweep spends ONE asset: the budget is a single number, and each
+	// listing is paid in whatever token it was priced in, so mixing them
+	// would compare a sum of two currencies against one cap. The choice is
+	// the buyer's, not a majority vote — a collection priced mostly in HBD
+	// can still hold the HIVE listing you actually came for.
+	const tokenOptions = useMemo<SelectOption[]>(() => {
+		const counts = new Map<string, number>();
+		for (const l of sweepable) {
+			if (l.nftContract !== nftContract) continue;
+			counts.set(l.paymentToken, (counts.get(l.paymentToken) ?? 0) + 1);
+		}
+		return Array.from(counts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.map(([t, n]) => ({
+				value: t,
+				label: tokenMeta.symbol(t),
+				hint: `${n} listing${n === 1 ? '' : 's'}`
+			}));
+	}, [sweepable, nftContract, tokenMeta]);
+
+	// Preselect the asset most of the collection is priced in, and repair a
+	// selection that the current collection has no listings in. Written as a
+	// correction rather than a reset so re-running it (token metadata arrives
+	// async, which rebuilds the options) cannot clobber a deliberate choice.
+	useEffect(() => {
+		if (tokenOptions.length === 0) {
+			if (payToken !== '') setPayToken('');
+			return;
+		}
+		if (!tokenOptions.some((o) => o.value === payToken)) setPayToken(tokenOptions[0].value);
+	}, [tokenOptions, payToken]);
+
 	const { selected, paymentToken, paySymbol, totalMicro } = useMemo(() => {
 		const matching = sweepable.filter((l) => l.nftContract === nftContract);
-		if (matching.length === 0) {
+		if (matching.length === 0 || payToken === '') {
 			return { selected: [], paymentToken: '', paySymbol: '', totalMicro: 0n };
 		}
-		// Count occurrences per paymentToken, pick majority.
-		const counts = new Map<string, number>();
-		for (const l of matching) counts.set(l.paymentToken, (counts.get(l.paymentToken) ?? 0) + 1);
-		let pt = matching[0].paymentToken;
-		let max = 0;
-		for (const [k, v] of counts) if (v > max) { max = v; pt = k; }
-
+		const pt = payToken;
 		const eligible = matching.filter((l) => l.paymentToken === pt);
 
 		// Sort cheapest first (per-unit). If the buyer hasn't set a budget,
@@ -111,7 +141,7 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 			paySymbol: tokenMeta.symbol(pt),
 			totalMicro: running
 		};
-	}, [sweepable, nftContract, maxTotal, tokenMeta]);
+	}, [sweepable, nftContract, payToken, maxTotal, tokenMeta]);
 
 	const collectionOptions = useMemo<SelectOption[]>(() => {
 		const set = new Set<string>();
@@ -128,9 +158,9 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 	}, [sweepable, collMeta]);
 
 	const NATIVE = new Set(['hive', 'hbd']);
-	const isNative = NATIVE.has((paymentToken || '').toLowerCase());
+	const isNative = NATIVE.has((payToken || '').toLowerCase());
 
-	const maxTotalMicro = maxTotal.trim() === '' || !paymentToken ? null : tokenMeta.toMicro(paymentToken, maxTotal.trim());
+	const maxTotalMicro = maxTotal.trim() === '' || !payToken ? null : tokenMeta.toMicro(payToken, maxTotal.trim());
 	const valid = nftContract !== '' && selected.length > 0 && !!maxTotalMicro;
 
 	async function handleSubmit() {
@@ -139,14 +169,18 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 		setError(null);
 		try {
 			const intents = isNative
-				? [{ type: 'transfer.allow' as const, args: { limit: maxTotalMicro, token: paymentToken } }]
+				? [{ type: 'transfer.allow' as const, args: { limit: maxTotalMicro, token: payToken } }]
 				: undefined;
 			const op = client.ops.sweepOp(
 				username,
 				{
 					nftContract,
 					listingIds: selected.map((l) => l.listingId),
-					maxTotal: maxTotalMicro
+					maxTotal: maxTotalMicro,
+					// Sent explicitly: the contract otherwise takes the first
+					// listing's token, and the buyer's budget is denominated in
+					// what they picked, not in whatever sorted first.
+					paymentToken: payToken
 				},
 				intents
 			);
@@ -163,12 +197,12 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 	return (
 		<Modal
 			title="Sweep collection"
-			subtitle="Buy the cheapest listings up to a budget — single tx, slippage-capped on-chain."
+			subtitle="Buy the cheapest SINGLE listings up to a budget — one tx, slippage-capped on-chain. Bundles, packs and mint spots are bought individually."
 			onClose={onClose}
 		>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : (
@@ -180,11 +214,28 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 						onChange={setNftContract}
 						disabled={submitting}
 					/>
-					{nftContract && paymentToken && (
-						<p className="magi-market-field-hint">Payment token: {paySymbol}</p>
+					{nftContract !== '' && (
+						<SelectPicker
+							label="Pay with"
+							value={payToken}
+							options={tokenOptions}
+							onChange={setPayToken}
+							disabled={submitting}
+						/>
+					)}
+					{nftContract !== '' && tokenOptions.length === 0 && (
+						<p className="magi-market-field-hint">
+							Nothing to sweep in this collection right now.
+						</p>
+					)}
+					{tokenOptions.length > 1 && (
+						<p className="magi-market-field-hint">
+							This collection is priced in {tokenOptions.length} assets. A sweep spends one of
+							them — listings in the others are left alone.
+						</p>
 					)}
 					<Field
-						label={`Max total to spend${paymentToken ? ` (${paySymbol})` : ''}`}
+						label={`Max total to spend${payToken ? ` (${tokenMeta.symbol(payToken)})` : ''}`}
 						hint="Sweep aborts on-chain if the cheapest-first selection exceeds this — your buyer balance is never silently over-pulled."
 					>
 						<TextInput inputMode="decimal" value={maxTotal} onChange={setMaxTotal} placeholder="e.g. 10.000" disabled={submitting} />

@@ -13,11 +13,31 @@ export interface MarketTileProps {
 	tokenId: string;
 	subtitle?: ReactNode;
 	price?: ReactNode;
+	/**
+	 * What KIND of thing this is — "single", "bundle", "random", "mint".
+	 * Carried on the tile because the buy-now tab mixes all four in one grid:
+	 * with the formats no longer separated by tab, the tile itself has to say
+	 * what you get.
+	 *
+	 * Pass the TEXT, not a styled element: the badge chrome is applied here.
+	 * Passing a ready-made `.magi-market-tile-badge` span nests two of them,
+	 * and since the outer is absolutely positioned with only an absolutely
+	 * positioned child, it collapses to its own padding — a stray dark pill
+	 * above the real badge.
+	 */
+	badge?: ReactNode;
+	/** Colour variant for the badge; omit for the default dark pill. */
+	badgeTone?: 'bundle' | 'random' | 'mint';
+	/**
+	 * Replaces the `#<tokenId>` line. Bundles and buckets are not a single
+	 * token, so "#0" would be the bundle's id masquerading as an NFT.
+	 */
+	label?: ReactNode;
 	actions?: ReactNode;
 	onOpen: () => void;
 }
 
-export function MarketTile({ imageUrl, tokenId, subtitle, price, actions, onOpen }: MarketTileProps) {
+export function MarketTile({ imageUrl, tokenId, subtitle, price, badge, badgeTone, label, actions, onOpen }: MarketTileProps) {
 	const [imgFailed, setImgFailed] = useState(false);
 	const useFallback = !imageUrl || imgFailed;
 	return (
@@ -46,8 +66,11 @@ export function MarketTile({ imageUrl, tokenId, subtitle, price, actions, onOpen
 						onError={() => setImgFailed(true)}
 					/>
 				)}
+				{badge && (
+					<span className={`magi-market-tile-badge${badgeTone ? ` ${badgeTone}` : ''}`}>{badge}</span>
+				)}
 			</div>
-			<div className="magi-market-tile-id" title={tokenId}>#{tokenId}</div>
+			<div className="magi-market-tile-id" title={tokenId}>{label ?? <>#{tokenId}</>}</div>
 			{subtitle && <div className="magi-market-tile-sub">{subtitle}</div>}
 			{price && <div className="magi-market-tile-price">{price}</div>}
 			{actions && <div className="magi-market-tile-actions">{actions}</div>}

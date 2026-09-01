@@ -107,7 +107,7 @@ export function AdminPanel({ client, username, nftContract, onSuccess, onClose }
 					</button>
 				</details>
 
-				{lastTx && <BroadcastResult txId={lastTx} />}
+				{lastTx && <BroadcastResult txId={lastTx} config={client.config} />}
 				{error && <p className="magi-market-status error">{error}</p>}
 
 				<div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>

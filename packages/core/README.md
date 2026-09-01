@@ -28,7 +28,14 @@ magi-market never escrows listed NFTs — it moves them via operator approval on
 - `buildAuctionNftFlow` — approve + `createAuction`
 - `buildRentalNftFlow` — approve + `listRental`
 - `buildMintSpotFlow` — operator approval **or** per-token `approve(market,id,maxSpots)` + `listMintSpots`
+- `buildAcceptOfferFlow` — NFT `approve(market,tokenId,amount)` + `acceptOffer`
+- `buildAcceptCollectionOfferFlow` — same approve leg + `acceptCollectionOffer` (holder picks the `tokenId` to deliver)
 - `buildBuyWithPayment` — token `approve(market,total)` + `buy`
+
+Accepting an offer is a *sale*, so it needs the same authorization as
+listing: `doAcceptOffer` pulls the NFT from the accepter via magi_nft's
+`safeTransferFrom` and preflight-aborts without an operator approval or a
+per-token allowance ≥ the accepted amount.
 
 Native (HBD/HIVE) payments use a `transfer.allow` intent instead — see `nativeTransferAllow`.
 

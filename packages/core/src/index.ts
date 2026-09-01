@@ -43,6 +43,17 @@ export {
 	buildListBundle,
 	buildBuyBundle,
 	buildDelistBundle,
+	// buckets (random-draw sales)
+	buildListBucket,
+	buildListBucketFlow,
+	buildAddToBucketFlow,
+	buildListBundleFlow,
+	buildAddToBucket,
+	buildBuyFromBucket,
+	buildBuyFromBucketWithPayment,
+	buildDelistBucket,
+	MAX_BUCKET_ENTRIES,
+	MAX_BUCKET_ENTRIES_PER_CALL,
 	// swaps
 	buildProposeSwap,
 	buildAcceptSwap,
@@ -74,6 +85,8 @@ export {
 	buildAuctionNftFlow,
 	buildRentalNftFlow,
 	buildMintSpotFlow,
+	buildAcceptOfferFlow,
+	buildAcceptCollectionOfferFlow,
 	buildBuyWithPayment,
 	buildListToken,
 	buildDelistToken,
@@ -89,10 +102,14 @@ export type {
 	MakeOfferParams,
 	CreateAuctionParams,
 	ListBundleParams,
+	ListBucketParams,
+	BuyFromBucketParams,
+	BucketEntryParam,
 	ProposeSwapParams,
 	ListRentalParams,
 	ListMintSpotsParams,
 	EmergencyWithdrawParams,
 	ListTokenParams,
-	BuyTokenParams
+	BuyTokenParams,
+	AcceptOfferFlowParams
 } from './ops/market.js';

@@ -286,15 +286,212 @@
 	white-space: nowrap;
 }
 
-/* ==== Tab strip ==== */
+/* ==== Top-level section switch (Market / Explore) ====
+ * One level above the tab strip and visually paired with the header badge,
+ * because Explore is not an order-book view. Deliberately a different shape
+ * from `.magi-market-tab` (pill, centered, no underline) so the two levels
+ * don't read as one flat row of eight peers. */
+.magi-market-sections {
+	display: flex;
+	justify-content: center;
+	gap: 0.25rem;
+	margin: 0 auto 0.85rem;
+	padding: 0.2rem;
+	width: fit-content;
+	max-width: 100%;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+}
+.magi-market-section {
+	padding: 0.35rem 1.1rem;
+	border: 0;
+	background: transparent;
+	color: var(--magi-text-muted);
+	font-family: inherit;
+	font-size: 0.82rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.magi-market-section:hover:not(.active) {
+	color: var(--magi-text);
+}
+.magi-market-section.active {
+	background: var(--magi-accent);
+	color: #fff;
+}
+
+/* ==== Explore: collection body + per-template sub-group ==== */
+/* The collection group's `layout="stack"` body: a column of a loose tile
+ * grid plus per-template sub-groups, instead of one flat grid. */
+.magi-market-coll-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	margin-top: 0.5rem;
+}
+.magi-market-tpl-group {
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--magi-tile-bg) 55%, transparent);
+	padding: 0.35rem 0.5rem;
+}
+.magi-market-tpl-header {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	width: 100%;
+	padding: 0.25rem 0.15rem;
+	border: 0;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font-family: inherit;
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+.magi-market-tpl-header:hover {
+	color: var(--magi-text);
+}
+.magi-market-tpl-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-tpl-badge {
+	flex-shrink: 0;
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--magi-text-muted);
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+	padding: 0.05rem 0.4rem;
+}
+/* Push the count to the right edge of the sub-group header. */
+.magi-market-tpl-header .magi-market-coll-count {
+	margin-left: auto;
+}
+
+/* ==== Explore: two-pane collection list / detail ====
+ * Only rendered above `EXPLORE_SPLIT_AT` panel px (see MarketPanel) — there
+ * is deliberately no media query here, because the switch is decided from the
+ * panel's own measured width so an embed in a narrow column still gets the
+ * stacked accordion on a wide screen. `min-width: 0` on the detail column is
+ * what stops a wide tile grid from pushing the sidebar off. */
+.magi-market-explore-split {
+	display: grid;
+	grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+	gap: 0.85rem;
+	align-items: start;
+}
+.magi-market-explore-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	min-width: 0;
+	/* Long collection lists scroll on their own rather than stretching the
+	 * page past the detail pane. */
+	max-height: 70vh;
+	overflow-y: auto;
+}
+.magi-market-explore-collbtn {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.5rem 0.6rem;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.85rem;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.magi-market-explore-collbtn:hover {
+	background: var(--magi-tile-bg-hover);
+	color: var(--magi-text);
+}
+.magi-market-explore-collbtn.active {
+	background: var(--magi-field-bg);
+	border-color: var(--magi-accent);
+	color: var(--magi-text);
+}
+.magi-market-explore-collname {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.magi-market-explore-detail {
+	min-width: 0;
+}
+.magi-market-explore-detail-head {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.5rem 0.6rem;
+	margin-bottom: 0.15rem;
+	background: var(--magi-field-bg);
+	border: 1px solid var(--magi-field-border, rgba(148, 163, 184, 0.2));
+	border-radius: 8px;
+}
+
+/* ==== Paged list footer ("Showing N of M" + Load more) ==== */
+.magi-market-loadmore {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem;
+	flex-wrap: wrap;
+	padding: 0.7rem 0.2rem 0.2rem;
+}
+
+/* ==== Tab strip ====
+ * Equal-width columns while they fit, a horizontal scroller when they
+ * don't — phones, or the panel embedded in a narrow column. There is no
+ * breakpoint here on purpose: the strip adapts to its *container*, which a
+ * viewport media query can't see, and 7 tabs already overflow well before
+ * phone width.
+ *
+ * `flex: 1` (basis 0) distributes the row when there's room. The
+ * `min-width: max-content` is what makes the scroller work: a flex item
+ * refuses to shrink below its own text, so the excess becomes scroll
+ * instead of seven unreadable slivers reading "Mint…".
+ *
+ * The scrollbar is hidden because the strip is only ~36px tall and a
+ * always-visible bar would eat a third of it; the clipped tab at the edge
+ * is the affordance, and MarketPanel keeps the active tab scrolled into
+ * view. `overscroll-behavior-x: contain` stops a swipe past the last tab
+ * from chaining into the browser's back-navigation gesture. */
 .magi-market-tabs {
 	display: flex;
 	gap: 0;
 	margin-bottom: 1rem;
 	border-bottom: 1px solid var(--magi-field-border);
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	-webkit-overflow-scrolling: touch;
+	/* Firefox / legacy Edge; the WebKit pseudo-element handles the rest. */
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.magi-market-tabs::-webkit-scrollbar {
+	display: none;
 }
 .magi-market-tab {
 	flex: 1;
+	min-width: max-content;
+	white-space: nowrap;
 	padding: 0.5rem 0.75rem;
 	background: transparent;
 	border: 0;
@@ -416,6 +613,18 @@
 .magi-market-tile.selected {
 	border-color: var(--magi-accent);
 	box-shadow: 0 0 0 1px var(--magi-accent-light);
+}
+/* Shown-but-unpickable: a token that exists in the collection yet can't be
+ * delivered (unminted, or soulbound and not held by the collection owner).
+ * Rendered rather than dropped so the grid matches what the chain actually
+ * holds — a silently missing NFT reads as a bug. `title` carries the reason. */
+.magi-market-tile.disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+.magi-market-tile.disabled:hover {
+	border-color: var(--magi-field-border);
+	background: var(--magi-tile-bg);
 }
 .magi-market-tile-image {
 	aspect-ratio: 1 / 1;
@@ -722,7 +931,7 @@
 	 * dropdowns inside the card can extend past the card bounds. The card
 	 * sits flush at the top of the overlay; a small margin keeps it off
 	 * the very edge. */
-	margin: clamp(0.5rem, 5vh, 4rem) 0;
+	margin: clamp(0.5rem, 3vh, 2.5rem) 0;
 	overflow: visible;
 }
 .magi-market-modal-card--wide {
@@ -1116,6 +1325,14 @@
 		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 		gap: 0.5rem;
 	}
+
+
+	/* Tab strip — trim the horizontal padding so one more tab is visible
+	 * before the scroller starts, and drop the label size a touch. */
+	.magi-market-tab {
+		padding: 0.5rem 0.6rem;
+		font-size: 0.8rem;
+	}
 }
 
 /* ==== Responsive: very narrow phones (~380px) ====
@@ -1281,6 +1498,24 @@
 .magi-market-tile-sub { font-size: 0.78rem; color: var(--magi-text-muted); }
 .magi-market-tile-expiry { font-size: 0.74rem; color: var(--magi-warn, #d97706); white-space: nowrap; }
 .magi-market-tile-expiry.expired { color: var(--magi-danger, #dc2626); font-weight: 600; }
+/* Holder line on an Explore tile ("held by alessandrawhite +34").
+ *
+ * `.magi-market-row-sub` must NOT be reused here: it is `white-space: nowrap`,
+ * and its `overflow: hidden` / `text-overflow: ellipsis` do nothing on an
+ * inline span — so the line laid out at its full 197px inside a 176px tile
+ * and ran over the tile beside it. Wrapping rather than truncating, because
+ * the holder is the point of the line; `anywhere` is needed because a Hive
+ * account name has no spaces to break at. */
+.magi-market-tile-holder {
+	display: block;
+	min-width: 0;
+	font-size: 0.7rem;
+	font-weight: 500;
+	line-height: 1.3;
+	color: var(--magi-text-muted);
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
 .magi-market-tile-price {
 	font-size: 0.85rem;
 	font-weight: 600;
@@ -1294,6 +1529,15 @@
 	margin-top: 0.25rem;
 }
 .magi-market-tile-actions .magi-market-submit { width: auto; padding: 0.35rem 0.75rem; font-size: 0.78rem; }
+/* An explanatory hint standing in for a button (e.g. "You don't hold this
+ * NFT" where Accept would be) gets its own full-width line. A tile is only
+ * ~140px wide, so left as a normal flex item the text would either force
+ * the tile wider or wrap into a ragged column beside the other actions. */
+.magi-market-tile-actions .magi-market-field-hint {
+	flex: 1 1 100%;
+	min-width: 0;
+	line-height: 1.3;
+}
 .magi-market-tile-bidder {
 	font-size: 0.72rem;
 	color: var(--magi-text-muted);
@@ -1357,7 +1601,17 @@
 .magi-market-coll-chevron { transition: transform 0.15s ease; }
 .magi-market-coll-chevron.open { transform: rotate(0deg); }
 .magi-market-coll-chevron:not(.open) { transform: rotate(-90deg); }
-.magi-market-coll-name { flex: 1; text-align: left; font-weight: 600; }
+.magi-market-coll-name { flex: 1; text-align: left; font-weight: 600; min-width: 0; }
+/* Owner suffix — "Fernlet NFTs (alessandrawhite)". Inside the name span so it
+ * wraps with the name instead of competing with it for flex space, muted and
+ * lighter so the collection stays the thing you read first. `anywhere`
+ * because an account name has no break points of its own. */
+.magi-market-coll-owner {
+	font-weight: 500;
+	font-size: 0.85em;
+	color: var(--magi-text-muted);
+	overflow-wrap: anywhere;
+}
 .magi-market-coll-count {
 	font-size: 0.75rem;
 	color: var(--magi-text-muted);
@@ -1369,10 +1623,17 @@
 /* ==== Sub-tabs row (Others / Yours) with right-aligned action button ==== */
 .magi-market-subtabs-row {
 	display: grid;
-	grid-template-columns: 1fr auto 1fr;
+	/* Create-actions left, Others/Yours pushed right against the filter and
+	   help icons it belongs with. It used to be centred by a symmetric
+	   1fr auto 1fr, which left it floating in the middle of the row with a
+	   gap on either side. */
+	grid-template-columns: 1fr auto auto;
 	align-items: center;
 	gap: 0.5rem;
 	margin: 0 0 0.85rem;
+}
+.magi-market-subtabs-action--right {
+	justify-self: end;
 }
 .magi-market-subtabs {
 	display: inline-flex;
@@ -1440,9 +1701,36 @@
 	color: var(--magi-text-secondary);
 }
 
-/* ==== Subtabs row: action on left, sub-tabs centered, filter toggle right ==== */
-.magi-market-subtabs-action--left  { justify-content: flex-start; }
-.magi-market-subtabs-action--right { justify-content: flex-end; gap: 0.4rem; }
+/* ==== Subtabs row: action on left, sub-tabs centered, filter toggle right ====
+ * The pills are pinned to column 2 rather than left to auto-placement,
+ * because a tab with no action (and Explore, which never has one) renders an
+ * EMPTY left slot — and if that slot is ever hidden, auto-placement drops the
+ * pills into column 1 and they stop being centred. Pinning makes "centred"
+ * independent of whether the action exists. */
+.magi-market-subtabs-action--left  { justify-content: flex-start; grid-column: 1; }
+.magi-market-subtabs             { grid-column: 2; }
+.magi-market-subtabs-action--right { justify-content: flex-end; gap: 0.4rem; grid-column: 3; }
+
+/* ==== Narrow panel: tab action moves ABOVE the Others/Yours pills ====
+ * Applied from the panel's own measured width (`SUBTABS_STACK_AT` in
+ * MarketPanel), not a viewport media query — the panel is embeddable, so a
+ * narrow column on a wide screen needs this too, and a viewport query missed
+ * exactly that case.
+ *
+ * One line for the action + pills + icons needs ~460px; below that the pills
+ * were crushed against the icons. The action spans all three columns, so it
+ * takes its own row above. Rows here are IMPLICIT (no `grid-template-areas`),
+ * which is what lets a hidden action collapse the row entirely instead of
+ * leaving its row-gap behind as a dead band. */
+.magi-market.is-narrow .magi-market-subtabs-action--left {
+	grid-column: 1 / -1;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+.magi-market.is-narrow .magi-market-subtabs-action:empty {
+	display: none;
+}
 
 .magi-market-filter-toggle-btn {
 	display: inline-flex;
@@ -1485,4 +1773,1058 @@
 	line-height: 1.45;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 	text-align: left;
+}
+
+/* ---- wizard step indicator (multi-step forms) ---- */
+.magi-market-wizard-steps {
+	display: flex;
+	gap: 0.25rem;
+	list-style: none;
+	margin: 0 0 1rem;
+	padding: 0;
+	/* Narrow modals scroll rather than wrap: a step strip that reflows to two
+	   lines reads as two separate controls.
+
+	   min-width:0 is load-bearing. This is a flex item, so its default
+	   min-width:auto floors it at max-content — and min-width BEATS max-width,
+	   so that floor propagates up and forces the modal card past its 380px cap.
+	   The card then gets wide enough that prose stops wrapping and runs off the
+	   screen. The steps keep their own width via flex-shrink:0 on each item. */
+	overflow-x: auto;
+	min-width: 0;
+	scrollbar-width: none;
+}
+.magi-market-wizard-steps::-webkit-scrollbar {
+	display: none;
+}
+.magi-market-wizard-step {
+	flex: 0 0 auto;
+}
+.magi-market-wizard-step-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.6rem;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.82rem;
+	cursor: default;
+	white-space: nowrap;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-btn:not(:disabled) {
+	cursor: pointer;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-btn:not(:disabled):hover {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-wizard-step.current .magi-market-wizard-step-btn {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-wizard-step-dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.1);
+	font-size: 0.72rem;
+	font-weight: 600;
+}
+.magi-market-wizard-step.current .magi-market-wizard-step-dot {
+	background: var(--magi-accent);
+	color: #fff;
+}
+.magi-market-wizard-step.done .magi-market-wizard-step-dot {
+	background: var(--magi-green);
+	color: #fff;
+}
+/* Plain flow, deliberately. A sticky footer kept the buttons reachable but did
+   it by covering the content underneath — trading one problem for another. The
+   dialog is instead SIZED to fit: the picker grid below carries the height cap,
+   so the card stays short enough that the buttons are simply on screen. */
+.magi-market-wizard-nav {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+}
+.magi-market-wizard-nav .magi-market-submit {
+	margin-top: 0;
+}
+/* The review step's summary: label/value rows, not a paragraph — a listing's
+   terms are scanned, not read. */
+.magi-market-review-row {
+	display: flex;
+	min-width: 0;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.35rem 0;
+	border-bottom: 1px solid var(--magi-card-border);
+	font-size: 0.88rem;
+}
+.magi-market-review-row:last-child {
+	border-bottom: none;
+}
+.magi-market-review-row dt {
+	color: var(--magi-text-secondary);
+	margin: 0;
+}
+.magi-market-review-row dd {
+	margin: 0;
+	text-align: right;
+	color: var(--magi-text);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* ---- multi-stack bucket builder ---- */
+.magi-market-check {
+	/* width:100% is load-bearing and NOT redundant with the flex stretch you
+	   would expect to size this. Measured in a browser against Altera's real
+	   bundle: without it the label sizes to its own max-content (827px inside a
+	   343px column) and the prose runs off the card. `align-self: stretch` and
+	   `align-items: stretch` on the parent BOTH fail to fix it — a host page
+	   rule is stopping this label behaving as a stretchable flex item — so the
+	   width is stated outright rather than inferred. */
+	width: 100%;
+	display: flex;
+	gap: 0.55rem;
+	align-items: flex-start;
+	padding: 0.5rem 0;
+	font-size: 0.88rem;
+	line-height: 1.4;
+	color: var(--magi-text-secondary);
+	cursor: pointer;
+}
+.magi-market-check input {
+	margin-top: 0.2rem;
+	accent-color: var(--magi-accent);
+	flex: 0 0 auto;
+}
+/* The label text must be allowed to shrink below its content width or it will
+   not wrap — same flex min-width:auto trap as the step strip above. */
+.magi-market-check > span {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.magi-market-check strong {
+	color: var(--magi-text);
+}
+.magi-market-stack {
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+	padding: 0.7rem;
+	margin-bottom: 0.7rem;
+}
+.magi-market-stack.open {
+	border-color: var(--magi-accent);
+}
+/* The whole header row is the toggle, so a collapsed stack is one big target
+   rather than a caret you have to hit. */
+.magi-market-stack-toggle {
+	display: flex;
+	align-items: baseline;
+	gap: 0.45rem;
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--magi-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.magi-market-stack-caret {
+	flex: 0 0 auto;
+	color: var(--magi-text-secondary);
+	font-size: 0.75rem;
+}
+.magi-market-stack-title {
+	font-weight: 600;
+	flex: 0 0 auto;
+}
+.magi-market-stack-summary {
+	color: var(--magi-text-secondary);
+	font-size: 0.8rem;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-stack-head {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	margin-bottom: 0.6rem;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+/* Open: the toggle is just a caret, so it must NOT flex — otherwise it expands
+   and shoves the name input to the far edge with a lake of space between. */
+.magi-market-stack.open .magi-market-stack-toggle {
+	flex: 0 0 auto;
+}
+.magi-market-stack.open .magi-market-stack-head > input {
+	flex: 1 1 12rem;
+	min-width: 0;
+	max-width: 20rem;
+}
+/* The stack name grows; the slot count stays small — it is a 1-2 digit field and
+   a full-width input would imply otherwise. */
+.magi-market-stack-head > :first-child {
+	flex: 1 1 8rem;
+	min-width: 0;
+}
+.magi-market-stack-slots {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: 0.8rem;
+	color: var(--magi-text-secondary);
+	white-space: nowrap;
+}
+.magi-market-stack-slots input {
+	width: 4.5rem;
+}
+
+
+/* ---- bucket wizard: use the width for NFTs, not for stretching inputs ---- */
+/* Fields were sitting flush against each other — a label reads as belonging to
+   whichever input it is nearest, so with no gap between fields the grouping is
+   ambiguous. The gap here is deliberately larger than the 0.3rem INSIDE a field
+   (label to input), so each label clearly attaches downward to its own control. */
+.magi-market-bucketform {
+	display: flex;
+	flex-direction: column;
+	gap: 1.15rem;
+}
+/* A stack's own contents stay tighter than the gaps between top-level fields —
+   it is one thing, not several. */
+.magi-market-bucketform .magi-market-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+}
+/* The card is 520px on desktop so the picker can show three NFTs per row. That
+   width is for the GRID — a text input stretched to 485px is just a bigger text
+   input, and a line of prose that long is harder to read, not easier. */
+/* Cap PROSE and text inputs, never a container that holds the picker: capping
+   `.magi-market-field` squeezed the NFT grid into ~600px of a full-width box and
+   left a dead margin beside it. */
+.magi-market-bucketform .magi-market-check,
+.magi-market-bucketform .magi-market-field-hint {
+	max-width: 34rem;
+}
+.magi-market-bucketform .magi-market-field > input,
+.magi-market-bucketform .magi-market-field > .magi-market-select,
+.magi-market-bucketform .magi-market-stack-slots input {
+	max-width: 22rem;
+}
+.magi-market-bucketform .magi-market-stack-slots input {
+	max-width: 5rem;
+}
+/* The grid is the one thing that SHOULD have the whole width. */
+.magi-market-bucketform .magi-market-grid {
+	max-width: none;
+	/* …and the one thing tall enough to push the buttons off screen, so it
+	   scrolls inside itself. Safe here where a flat grid of tiles is being
+	   bounded — unlike the card, which must not scroll because the picker's
+	   dropdowns need to escape it. */
+	/* 34vh, not more: the fixed chrome around it (title, steps, stack headers,
+	   the add button, the nav) is ~380px, so a taller grid pushes the buttons
+	   off a 700px-tall window — a laptop with a browser bar open. */
+	max-height: 34vh;
+	overflow-y: auto;
+	padding-right: 0.2rem;
+}
+
+/* ---- full-panel views (used instead of a modal for real work) ---- */
+.magi-market-view {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+}
+.magi-market-view-head {
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
+	display: flex;
+	align-items: flex-start;
+	gap: 0.75rem;
+	padding-bottom: 0.6rem;
+	border-bottom: 1px solid var(--magi-card-border);
+}
+.magi-market-view-back {
+	flex: 0 0 auto;
+	padding: 0.35rem 0.7rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.82rem;
+	cursor: pointer;
+}
+.magi-market-view-back:hover {
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-view-titles {
+	min-width: 0;
+}
+.magi-market-view-title {
+	margin: 0;
+	font-size: 1rem;
+}
+.magi-market-view-subtitle {
+	margin: 0.15rem 0 0;
+	font-size: 0.82rem;
+	color: var(--magi-text-secondary);
+}
+/* In a full-width view the grid has room, so let it breathe rather than
+   inheriting the dialog's height cap — there is no dialog left to overflow. */
+.magi-market-view .magi-market-bucketform .magi-market-grid {
+	max-height: none;
+	overflow-y: visible;
+	/* Half again as wide as the 104px this started at: a token id is the one
+	   thing on the tile you cannot guess from the picture, and at the smaller
+	   size it was being cut off. */
+	grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+}
+/* Prose and single-line inputs keep a readable measure even though the view is
+   wide. Width is for the grid; a 690px-wide text input is not an improvement. */
+.magi-market-view .magi-market-bucketform .magi-market-check,
+.magi-market-view .magi-market-bucketform .magi-market-field-hint {
+	max-width: 38rem;
+}
+/* The wizard's own chrome reads better centred in the wider column than
+   stranded against the left edge. */
+.magi-market-view .magi-market-wizard-steps {
+	margin-bottom: 1.2rem;
+}
+.magi-market-view .magi-market-wizard-nav {
+	margin-top: 1.2rem;
+	padding-top: 0.9rem;
+	border-top: 1px solid var(--magi-card-border);
+}
+.magi-market-view .magi-market-wizard-nav .magi-market-submit {
+	width: auto;
+	min-width: 8rem;
+	padding: 0.5rem 1.2rem;
+}
+/* Back at the left edge, the forward action at the right — the conventional
+   wizard reading order, and it stops a lone "Next" sitting oddly under the
+   left margin. */
+.magi-market-view .magi-market-wizard-nav {
+	justify-content: flex-end;
+}
+.magi-market-view .magi-market-wizard-nav .magi-market-submit.ghost:first-child {
+	margin-right: auto;
+}
+/* A stack is a section of the page now, not a boxed row in a cramped dialog. */
+.magi-market-view .magi-market-stack {
+	padding: 0.9rem;
+}
+.magi-market-view .magi-market-stack.open {
+	background: rgba(255, 255, 255, 0.02);
+}
+
+/* ---- selectable option cards (replacing checkbox rows) ---- */
+/* Two side-by-side on desktop, stacked when there is no room. Buttons rather
+   than checkboxes because each option carries a sentence of explanation — a
+   14px tickbox is a small target for a choice that needs three lines to
+   describe, and the whole card being pressable matches how it reads. */
+.magi-market-options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+	gap: 0.6rem;
+}
+.magi-market-option {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	min-width: 0;
+	padding: 0.85rem 0.95rem;
+	text-align: left;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+.magi-market-option:hover:not(:disabled) {
+	border-color: var(--magi-accent);
+}
+.magi-market-option.selected {
+	border-color: var(--magi-accent);
+	background: var(--magi-accent-light);
+	color: var(--magi-text);
+}
+.magi-market-option:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+.magi-market-option-title {
+	font-weight: 600;
+	color: var(--magi-text);
+}
+/* A tick, drawn in the corner rather than as a separate control, so the
+   selected state is unmistakable without reintroducing a checkbox. */
+.magi-market-option.selected .magi-market-option-title::after {
+	content: ' ✓';
+	color: var(--magi-accent);
+}
+.magi-market-option-desc {
+	font-size: 0.82rem;
+	line-height: 1.4;
+}
+
+/* ---- centre the view's working column ---- */
+/* The panel is wider than a form wants to be. Everything except the header
+   sits in a centred column so the content is not stranded against the left
+   edge with a third of the panel empty beside it. The grid still gets the full
+   column, which is what the width was for. */
+.magi-market-view-body {
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+}
+
+/* The "already approved" opt-out, wherever a form offers it. */
+.magi-market-approved {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+}
+.magi-market-approved input {
+	accent-color: var(--magi-accent);
+	flex: 0 0 auto;
+}
+.magi-market-approved .magi-market-field-hint {
+	margin: 0;
+}
+
+/* The leave-confirmation over a panel view. Narrow on purpose: it asks one
+   question, so it should not look like another form. */
+.magi-market-confirm {
+	max-width: 24rem;
+	margin-top: 12vh;
+}
+.magi-market-confirm-actions {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 1rem;
+}
+.magi-market-confirm-actions .magi-market-submit {
+	flex: 1 1 0;
+	width: auto;
+}
+
+/* Format badge on a tile. The buy-now tab mixes singles, bundles, random
+   packs and mint spots in one grid, so the tile has to say which it is.
+   Sits on the image rather than under it: the grid is scanned by picture,
+   and a line of text below would be read only after the choice was made. */
+.magi-market-tile-image {
+	position: relative;
+}
+.magi-market-tile-badge {
+	position: absolute;
+	top: 0.35rem;
+	left: 0.35rem;
+	padding: 0.1rem 0.4rem;
+	border-radius: 999px;
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.62);
+	backdrop-filter: blur(2px);
+	pointer-events: none;
+}
+.magi-market-tile-badge.bundle { background: rgba(37, 99, 235, 0.85); }
+.magi-market-tile-badge.random { background: rgba(147, 51, 234, 0.85); }
+.magi-market-tile-badge.mint   { background: rgba(5, 150, 105, 0.85); }
+
+/* Format filter chips above the grouped grid. */
+.magi-market-kindchips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-bottom: 0.6rem;
+}
+.magi-market-kindchip {
+	padding: 0.28rem 0.7rem;
+	border-radius: 999px;
+	border: 1px solid var(--magi-field-border);
+	background: transparent;
+	color: var(--magi-text-secondary);
+	font: inherit;
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.magi-market-kindchip:hover { background: var(--magi-accent-light); }
+.magi-market-kindchip.active {
+	background: var(--magi-accent);
+	border-color: var(--magi-accent);
+	color: #fff;
+}
+.magi-market-kindchip-count {
+	opacity: 0.7;
+	margin-left: 0.3rem;
+	font-size: 0.72rem;
+}
+
+/* A tile's action row shares one line when there is room and breaks when
+   there isn't. Forcing it to stay on one line squeezed the buttons on the
+   auction/offer tiles, where a meta line ("High: hive:...") sits beside them:
+   a button crushed to a sliver is worse than a button on its own line. The
+   floor below is what makes it break rather than shrink. */
+.magi-market-tile-actions .magi-market-submit {
+	flex: 1 1 auto;
+	min-width: 4.25rem;
+	padding-left: 0.4rem;
+	padding-right: 0.4rem;
+	white-space: nowrap;
+}
+/* The meta line takes what it can get and gives the row up rather than
+   starving the button next to it. */
+.magi-market-tile-bidder {
+	flex: 1 1 7rem;
+	max-width: 100%;
+}
+.magi-market-tile-per {
+	opacity: 0.65;
+	font-size: 0.86em;
+}
+
+/* The create chooser behind the single narrow-panel toolbar button. Rows
+   rather than a row of chips: on a phone there is width for a label AND a
+   line saying what it does, which the five toolbar buttons never had. */
+.magi-market-createlist {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+.magi-market-createrow {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	width: 100%;
+	padding: 0.6rem 0.8rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--magi-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.magi-market-createrow:hover {
+	background: var(--magi-accent-light);
+	border-color: var(--magi-accent);
+}
+.magi-market-createrow-label { font-size: 0.92rem; font-weight: 600; }
+.magi-market-createrow-hint { font-size: 0.78rem; color: var(--magi-text-secondary); }
+
+/* Chips scroll sideways on a narrow panel instead of wrapping to three rows.
+   NOT `min-width: max-content` on this element, tempting as it looks: that
+   makes the track itself as wide as its content, which pushes the demand up
+   the tree and gives the whole PAGE a horizontal scrollbar. The track stays
+   auto-width and the chips refuse to shrink — that is what overflows. */
+.magi-market.is-narrow .magi-market-kindchips {
+	flex-wrap: nowrap;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.magi-market.is-narrow .magi-market-kindchips::-webkit-scrollbar { display: none; }
+/* A chip must not be cut mid-word by the scroller: "Single NFTs" clipping to
+   "Ts" reads as a bug, not as "scroll for more". */
+.magi-market.is-narrow .magi-market-kindchip {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+/* ---- pack reveal ---------------------------------------------------- */
+.magi-market-reveal {
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+	align-items: center;
+}
+.magi-market-reveal-wait {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 2.5rem 0;
+}
+.magi-market-reveal-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(108px, 132px));
+	gap: 0.7rem;
+	justify-content: center;
+	width: 100%;
+	/* The cards turn in 3D, so the whole set shares one vanishing point —
+	   per-card perspective would make each flip look like its own animation. */
+	perspective: 1200px;
+}
+.magi-market-card {
+	/* Just tall enough for a square of art plus its label — 3/4 left a band of
+	   empty card under the id. */
+	aspect-ratio: 1 / 1.2;
+	cursor: default;
+}
+.magi-market-card.flipped { cursor: pointer; }
+.magi-market-card-inner {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	transform-style: preserve-3d;
+	transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.magi-market-card.flipped .magi-market-card-inner {
+	transform: rotateY(180deg);
+}
+.magi-market-card-back,
+.magi-market-card-face {
+	position: absolute;
+	inset: 0;
+	backface-visibility: hidden;
+	border-radius: 12px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--magi-card-border);
+}
+.magi-market-card-back {
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image:
+		repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.045) 0 6px, transparent 6px 12px),
+		linear-gradient(160deg, var(--magi-accent) 0%, #1b1e2b 85%);
+}
+.magi-market-card-back img { width: 46%; opacity: 0.75; }
+/* The revealed face mirrors `.magi-market-tile`: art in a square box, id
+   underneath. A card that presents its NFT differently from every other tile
+   in the widget reads as a different object. */
+.magi-market-card-face {
+	transform: rotateY(180deg);
+	/* OPAQUE base under the themed surface. Every card/tile background token
+	   in the theme is rgba-based, so a face painted only with them is
+	   see-through — and the card's own back, sitting directly behind it, bled
+	   through the front of a flipped card as a second, larger, faded logo.
+	   `backface-visibility` is not enough on its own; nothing may show through
+	   a card that is meant to be face-up. */
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image: var(--magi-card-bg);
+	flex-direction: column;
+	justify-content: flex-start;
+	padding: 0.4rem;
+	gap: 0.15rem;
+}
+.magi-market-card-art {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	background-color: var(--magi-modal-bg, #1c1f2c);
+	background-image: linear-gradient(var(--magi-field-bg), var(--magi-field-bg));
+	border-radius: 8px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.magi-market-card-art img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.magi-market-card-art .magi-market-tile-fallback-img {
+	width: 55%;
+	height: auto;
+	object-fit: contain;
+	opacity: 0.6;
+}
+.magi-market-card-id {
+	display: block;
+	width: 100%;
+	padding: 0.15rem 0.1rem 0;
+	font-size: 0.72rem;
+	/* Left, like every other tile's id. */
+	text-align: left;
+	color: var(--magi-text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* A guaranteed pull is the reason people buy the pack, so it gets the shine
+   — but only once it has actually turned over. */
+.magi-market-card.rare .magi-market-card-face {
+	border-color: var(--magi-accent);
+	box-shadow: 0 0 0 1px var(--magi-accent), 0 6px 22px rgba(124, 106, 255, 0.45);
+}
+.magi-market-card.rare.flipped .magi-market-card-face::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+	transform: translateX(-120%);
+	animation: magi-market-shine 1.1s ease-out 0.35s 1;
+}
+@keyframes magi-market-shine {
+	to { transform: translateX(120%); }
+}
+.magi-market-card-hit {
+	position: absolute;
+	top: 0.3rem;
+	left: 0.3rem;
+	z-index: 1;
+	padding: 0.1rem 0.38rem;
+	border-radius: 999px;
+	font-size: 0.6rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #fff;
+	background: var(--magi-accent);
+}
+.magi-market-reveal-sum { margin: 0; text-align: center; }
+.magi-market-reveal-actions { display: flex; gap: 0.5rem; }
+.magi-market-reveal-actions .magi-market-submit { width: auto; padding: 0.5rem 1.4rem; }
+
+/* Respect a system preference for less motion: the cards still turn over,
+   they just stop travelling to do it. */
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-card-inner { transition-duration: 0.001s; }
+	.magi-market-card.rare.flipped .magi-market-card-face::after { animation: none; }
+}
+
+/* ---- activity feed --------------------------------------------------- */
+.magi-market-activity {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+.magi-market-activity-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.7rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 10px;
+	background: var(--magi-card-bg, transparent);
+	font-size: 0.82rem;
+}
+.magi-market-activity-kind {
+	flex: 0 0 auto;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	font-size: 0.66rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #fff;
+	background: rgba(255, 255, 255, 0.16);
+	white-space: nowrap;
+}
+.magi-market-activity-kind.bought { background: rgba(37, 99, 235, 0.85); }
+.magi-market-activity-kind.bucketPurchase { background: rgba(147, 51, 234, 0.85); }
+.magi-market-activity-kind.mintSpotBought { background: rgba(5, 150, 105, 0.85); }
+.magi-market-activity-kind.swept { background: rgba(217, 119, 6, 0.85); }
+.magi-market-activity-main {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-activity-actor { color: var(--magi-text-secondary); }
+.magi-market-activity-actor.me { color: var(--magi-accent); font-weight: 600; }
+.magi-market-activity-coll { color: var(--magi-text-muted); }
+.magi-market-activity-link {
+	border: 0;
+	background: none;
+	padding: 0;
+	font: inherit;
+	color: var(--magi-text);
+	cursor: pointer;
+	text-decoration: underline dotted;
+}
+.magi-market-activity-price { flex: 0 0 auto; white-space: nowrap; }
+.magi-market-activity-ago {
+	flex: 0 0 auto;
+	color: var(--magi-text-muted);
+	font-size: 0.74rem;
+	min-width: 2.2rem;
+	text-align: right;
+}
+
+/* Recent-sales badge on a collection header. */
+.magi-market-heat {
+	flex: 0 0 auto;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	font-size: 0.68rem;
+	color: #fff;
+	background: rgba(217, 119, 6, 0.85);
+	white-space: nowrap;
+}
+
+/* Honesty line when a list came back at the indexer's row ceiling. */
+.magi-market-truncated {
+	margin: 0 0 0.5rem;
+	padding: 0.4rem 0.6rem;
+	border: 1px dashed var(--magi-field-border);
+	border-radius: 8px;
+}
+
+/* ---- explore filters ------------------------------------------------- */
+.magi-market-xfilters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.9rem;
+	align-items: flex-end;
+	padding: 0.75rem 0.9rem;
+	margin-bottom: 0.8rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+}
+.magi-market-xfilter-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+}
+.magi-market-xfilter-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.magi-market-xfilter-reset { width: auto; padding: 0.3rem 0.9rem; margin-left: auto; }
+
+/* ---- explore hover preview ------------------------------------------- */
+.magi-market-preview-host {
+	position: relative;
+}
+.magi-market-preview {
+	position: absolute;
+	left: 50%;
+	bottom: calc(100% - 2.2rem);
+	transform: translate(-50%, 6px);
+	width: 216px;
+	max-width: 70vw;
+	padding: 0.3rem;
+	border: 1px solid var(--magi-accent);
+	border-radius: 12px;
+	background: var(--magi-modal-bg, #171a24);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.14s ease, transform 0.14s ease;
+	/* The preview must never swallow the click that opens the details. */
+	pointer-events: none;
+	z-index: 6;
+}
+.magi-market-preview img {
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	object-fit: contain;
+	border-radius: 8px;
+	background: var(--magi-field-bg, #0f121a);
+	display: block;
+}
+.magi-market-preview-cap {
+	display: block;
+	padding: 0.3rem 0.2rem 0.1rem;
+	font-size: 0.72rem;
+	color: var(--magi-text-secondary);
+	text-align: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-preview-host:hover .magi-market-preview,
+.magi-market-preview-host:focus-within .magi-market-preview {
+	opacity: 1;
+	visibility: visible;
+	transform: translate(-50%, 0);
+}
+/* Touch has no hover: the preview would either never show or stick after a
+   tap, and tapping already opens the full details. */
+@media (hover: none) {
+	.magi-market-preview { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-preview { transition: none; }
+}
+
+/* A caution, not a failure: the listing would still work, it just would not
+   do what the seller meant. */
+.magi-market-status.warn {
+	color: #f2c14a;
+	border: 1px solid rgba(242, 193, 74, 0.35);
+	background: rgba(242, 193, 74, 0.08);
+	border-radius: 8px;
+	padding: 0.45rem 0.6rem;
+}
+
+/* A single-pick sale is one pile: no accordion, no name, so the card chrome
+   around it is a box drawn around the only thing on the step. */
+.magi-market-stack.flat {
+	border: 0;
+	padding: 0;
+	margin-bottom: 0;
+}
+
+/* The entry-limit line, once the number typed exceeds what will fit. */
+.magi-market-cap-hit {
+	color: #f2c14a;
+}
+
+/* ---- transaction status --------------------------------------------- */
+/* The base receipt is styled as a success. While a tx is still in flight it
+   has not succeeded yet, so it is neutral until the chain says otherwise —
+   a green box reading "Waiting for the network" claims the thing it is
+   waiting for. */
+.magi-market-success.tx-pending,
+.magi-market-success.tx-included,
+.magi-market-success.tx-unknown {
+	border-color: var(--magi-field-border);
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+}
+.magi-market-success.tx-pending .magi-market-success-label,
+.magi-market-success.tx-included .magi-market-success-label {
+	color: var(--magi-text-secondary);
+}
+.magi-market-success.tx-confirmed {
+	border-color: rgba(16, 185, 129, 0.55);
+}
+.magi-market-success.tx-failed {
+	border-color: rgba(239, 68, 68, 0.6);
+}
+.magi-market-success.tx-failed .magi-market-success-label { color: #f87171; }
+.magi-market-success.tx-confirmed .magi-market-success-label { color: #34d399; }
+.magi-market-success.tx-unknown .magi-market-success-label { color: var(--magi-text-secondary); }
+.magi-market-tx-tick { margin-right: 0.35rem; font-weight: 700; }
+/* A spinner rather than a static word, because the wait is real and a line
+   that never changes reads as a UI that has stopped. */
+.magi-market-tx-spin {
+	display: inline-block;
+	width: 0.7rem;
+	height: 0.7rem;
+	margin-right: 0.4rem;
+	vertical-align: -1px;
+	border: 2px solid var(--magi-field-border);
+	border-top-color: var(--magi-accent);
+	border-radius: 50%;
+	animation: magi-market-tx-spin 0.8s linear infinite;
+}
+@keyframes magi-market-tx-spin {
+	to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.magi-market-tx-spin { animation-duration: 2.4s; }
+}
+
+/* ---- panel-level transaction watcher --------------------------------- */
+.magi-market-txwatch {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.45rem 0.7rem;
+	margin-bottom: 0.4rem;
+	border: 1px solid var(--magi-field-border);
+	border-radius: 10px;
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+	font-size: 0.8rem;
+}
+.magi-market-txwatch.tx-confirmed {
+	border-color: rgba(16, 185, 129, 0.5);
+	color: #34d399;
+}
+.magi-market-txwatch.tx-failed {
+	border-color: rgba(239, 68, 68, 0.55);
+	color: #f87171;
+}
+.magi-market-txwatch-label { font-weight: 600; }
+.magi-market-txwatch-state {
+	color: var(--magi-text-secondary);
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.magi-market-txwatch.tx-confirmed .magi-market-txwatch-state,
+.magi-market-txwatch.tx-failed .magi-market-txwatch-state { color: inherit; }
+.magi-market-txwatch-x {
+	flex: 0 0 auto;
+	border: 0;
+	background: none;
+	color: var(--magi-text-muted);
+	cursor: pointer;
+	font-size: 0.8rem;
+	padding: 0 0.2rem;
+}
+.magi-market-txwatch-list { margin-bottom: 0.6rem; }
+/* `indexed` is the real finish line — confirmed only means the chain has it,
+   and the widget reads everything through the indexer. */
+.magi-market-success.tx-indexed { border-color: rgba(16, 185, 129, 0.55); }
+.magi-market-success.tx-indexed .magi-market-success-label { color: #34d399; }
+.magi-market-success.tx-confirmed {
+	border-color: var(--magi-field-border);
+	background: var(--magi-field-bg, rgba(255, 255, 255, 0.03));
+}
+.magi-market-success.tx-confirmed .magi-market-success-label { color: var(--magi-text-secondary); }
+.magi-market-txwatch.tx-indexed { border-color: rgba(16, 185, 129, 0.5); color: #34d399; }
+.magi-market-txwatch.tx-confirmed { border-color: var(--magi-field-border); color: inherit; }
+.magi-market-txwatch.tx-indexed .magi-market-txwatch-state { color: inherit; }
+
+/* ---- mystery-sale detail card ---------------------------------------- */
+.magi-market-bucketcard { display: block; }
+/* Prices and the buy actions. Wraps rather than overflowing: on a phone a
+   title, two prices and two buttons never fit one line, which is exactly how
+   this card used to push its own buttons off the screen. */
+.magi-market-bucketcard-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.6rem 0.7rem;
+	margin-bottom: 0.6rem;
+	border: 1px solid var(--magi-card-border);
+	border-radius: 12px;
+}
+.magi-market-bucketcard-price {
+	font-size: 0.86rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.magi-market-bucketcard-bar .magi-market-submit {
+	width: auto;
+	flex: 1 1 8rem;
+	padding: 0.4rem 0.9rem;
+}
+.magi-market-reveal-patience { opacity: 0.7; margin: 0; }
+
+/* Two per row in a sale's contents: each tile carries a picture, how many are
+   left and the odds, which does not survive being squeezed narrower. */
+.magi-market-bucketcard-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 }

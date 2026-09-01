@@ -137,7 +137,7 @@ export function MakeBidForm({ client, username, auction, onSuccess, onClose }: M
 		<Modal title={`Bid on #${auction.tokenId}`} subtitle={subtitle} onClose={onClose}>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : isDutch ? (

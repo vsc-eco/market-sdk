@@ -84,6 +84,10 @@ export function MakeOfferForm({
 	// The contract wildcard for a collection offer is an empty tokenId.
 	const resolvedTokenId = tokenChoice === ANY_TOKEN ? '' : tokenChoice;
 	const tokenChosen = tokenChoice !== '';
+	const isCollectionOffer = tokenChoice === ANY_TOKEN;
+	/** How many accounts hold the chosen token — drives the "who can accept" copy. */
+	const chosenHolderCount =
+		tokens.find((t) => t.tokenId === resolvedTokenId)?.holders.length ?? 0;
 
 	const valid = useMemo(
 		() =>
@@ -136,7 +140,7 @@ export function MakeOfferForm({
 		<Modal title="Make an offer" subtitle="Your payment is escrowed now (at offer time); refunded if you cancel or it expires unaccepted." onClose={onClose}>
 			{txId ? (
 				<>
-					<BroadcastResult txId={txId} />
+					<BroadcastResult txId={txId} config={client.config} />
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : (
@@ -162,6 +166,20 @@ export function MakeOfferForm({
 							onChange={setTokenChoice}
 							disabled={submitting}
 						/>
+					)}
+
+					{/* An offer is an OPEN bid on (nftContract, tokenId): the payload
+					    carries no seller and `doAcceptOffer` lets any holder accept.
+					    Say so explicitly — picking a token whose tile lists a holder
+					    otherwise reads as "offering to that account". */}
+					{tokenChosen && (
+						<p className="magi-market-field-hint">
+							{isCollectionOffer
+								? 'Open offer: anyone holding an NFT from this collection can accept it — whoever accepts first gets paid.'
+								: chosenHolderCount > 1
+									? `Open offer: any of the ${chosenHolderCount} accounts holding this NFT can accept it — whoever accepts first gets paid. You can't direct an offer at one specific account.`
+									: "Open offer: whoever holds this NFT can accept it. You can't direct an offer at one specific account."}
+						</p>
 					)}
 
 					<Field label="Amount">

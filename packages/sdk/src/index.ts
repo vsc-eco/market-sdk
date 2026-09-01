@@ -2,7 +2,9 @@ import {
 	MAINNET_CONFIG,
 	TESTNET_CONFIG,
 	buildAcceptCollectionOffer,
+	buildAcceptCollectionOfferFlow,
 	buildAcceptOffer,
+	buildAcceptOfferFlow,
 	buildAcceptOwnership,
 	buildAcceptSwap,
 	buildAddPaymentToken,
@@ -23,6 +25,14 @@ import {
 	buildCreateAuction,
 	buildDelist,
 	buildDelistBundle,
+	buildListBucket,
+	buildListBucketFlow,
+	buildAddToBucketFlow,
+	buildListBundleFlow,
+	buildAddToBucket,
+	buildBuyFromBucket,
+	buildBuyFromBucketWithPayment,
+	buildDelistBucket,
 	buildDelistMintSpots,
 	buildDelistRental,
 	buildDenyCollection,
@@ -64,11 +74,15 @@ import {
 	type BuyParams,
 	type CreateAuctionParams,
 	type ListBundleParams,
+	type ListBucketParams,
+	type BuyFromBucketParams,
+	type BucketEntryParam,
 	type ListMintSpotsParams,
 	type ListParams,
 	type ListRentalParams,
 	type ListTokenParams,
 	type BuyTokenParams,
+	type AcceptOfferFlowParams,
 	type MagiConfig,
 	type MakeOfferParams,
 	type MarketOpBundle,
@@ -101,6 +115,12 @@ export type {
 	Offer,
 	Auction,
 	BundleListing,
+	BucketListing,
+	BucketEntry,
+	BucketStack,
+	BucketDraw,
+	ActivityEvent,
+	ActivityKind,
 	SwapProposal,
 	RentalListing,
 	MintSpotListing,
@@ -109,7 +129,8 @@ export type {
 	RoyaltyInfo,
 	RoyaltySplit,
 	CustomJsonOp,
-	MarketOpBundle
+	MarketOpBundle,
+	AcceptOfferFlowParams
 } from '@vsc.eco/market-core';
 export {
 	createDeployerClient,
@@ -126,7 +147,12 @@ export type {
 	PrepareDeployResponse,
 	CreateDeployerClientOptions
 } from './deployer.js';
-export { createMarketProvider } from './marketProvider.js';
+export {
+	createMarketProvider,
+	INDEXER_ROW_CAP,
+	MARKET_LIST_MAX,
+	looksTruncated
+} from './marketProvider.js';
 export type { MarketProvider } from './marketProvider.js';
 
 /**
@@ -240,10 +266,19 @@ export interface MarketClient {
 		setCollectionFeeOp(username: string, p: { nftContract: string; feeBps: number }): MarketOpBundle;
 		clearCollectionFeeOp(username: string, p: { nftContract: string }): MarketOpBundle;
 		setMinOfferOp(username: string, p: { minOffer: string }): MarketOpBundle;
-		sweepOp(username: string, p: { nftContract: string; listingIds: number[]; maxTotal: string }, intents?: VscIntent[]): MarketOpBundle;
+		sweepOp(username: string, p: { nftContract: string; listingIds: number[]; maxTotal: string; paymentToken?: string }, intents?: VscIntent[]): MarketOpBundle;
 		listBundleOp(username: string, p: ListBundleParams): MarketOpBundle;
 		buyBundleOp(username: string, p: { bundleId: number }, intents?: VscIntent[]): MarketOpBundle;
 		delistBundleOp(username: string, p: { bundleId: number }): MarketOpBundle;
+		/** Open a bucket (random-draw sale). See `listBucketFlow` for the approval leg. */
+		listBucketOp(username: string, p: ListBucketParams): MarketOpBundle;
+		/** Approve the market, then open the bucket — returns both ops in order. */
+		listBucketFlow(username: string, p: ListBucketParams & { skipApproval?: boolean }): MarketOpBundle[];
+		/** Add stock to an existing bucket. Append-only: new token ids only. */
+		addToBucketOp(username: string, p: { bucketId: number; entries: BucketEntryParam[] }): MarketOpBundle;
+		/** Draw from a bucket — one unit, or a whole pack. */
+		buyFromBucketOp(username: string, p: BuyFromBucketParams, intents?: VscIntent[]): MarketOpBundle;
+		delistBucketOp(username: string, p: { bucketId: number }): MarketOpBundle;
 		proposeSwapOp(username: string, p: ProposeSwapParams): MarketOpBundle;
 		acceptSwapOp(username: string, p: { swapId: number }, intents?: VscIntent[]): MarketOpBundle;
 		cancelSwapOp(username: string, p: { swapId: number }): MarketOpBundle;
@@ -291,6 +326,26 @@ export interface MarketClient {
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract "put an NFT up for sale": NFT approve + `list`. */
 	sell(username: string, p: ListParams & { skipApproval?: boolean }): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/**
+	 * Cross-contract "open a bucket": NFT operator approval + `listBucket`.
+	 * Operator approval specifically — a bucket cannot use per-token
+	 * allowances, because the contract does not know in advance which token a
+	 * draw will move.
+	 */
+	listBucket(
+		username: string,
+		p: ListBucketParams & { skipApproval?: boolean }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract "restock a bucket": one NFT approve per entry + `addToBucket`. */
+	addToBucket(
+		username: string,
+		p: { bucketId: number; nftContract: string; entries: BucketEntryParam[]; skipApproval?: boolean }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract "list a bundle": one NFT approve per item + `listBundle`. */
+	listBundle(
+		username: string,
+		p: ListBundleParams & { skipApproval?: boolean }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract: NFT approve + `createAuction`. */
 	auction(username: string, p: CreateAuctionParams & { skipApproval?: boolean }): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract: NFT approve + `listRental`. */
@@ -300,10 +355,31 @@ export interface MarketClient {
 		username: string,
 		p: ListMintSpotsParams & { auth?: 'operator' | 'allowance'; skipApproval?: boolean }
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/**
+	 * Cross-contract "accept a buy offer": NFT `approve(market,tokenId,amount)`
+	 * + `acceptOffer`. Accepting hands the NFT to the buyer, so the market
+	 * needs transfer authorization first — without it the accept leg aborts
+	 * with "Marketplace not approved as operator or sufficient per-token
+	 * allowance to fulfill offer".
+	 */
+	acceptOffer(
+		username: string,
+		p: AcceptOfferFlowParams
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract: NFT approve + `acceptCollectionOffer` (holder picks `tokenId`). */
+	acceptCollectionOffer(
+		username: string,
+		p: AcceptOfferFlowParams
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract: token `approve(market,total)` + `buy`. */
 	buyWithPayment(
 		username: string,
 		p: BuyParams & { paymentToken: string; total: string }
+	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
+	/** Cross-contract bucket draw: token `approve(market,total)` + `buyFromBucket`. */
+	buyFromBucketWithPayment(
+		username: string,
+		p: BuyFromBucketParams & { paymentToken: string; total: string }
 	): Promise<{ txIds: string[]; bundles: MarketOpBundle[] }>;
 	/** Cross-contract "sell a token": asset-token `approve(market,amount)` + `listToken`. */
 	sellToken(
@@ -462,6 +538,11 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 			listBundleOp: (u, p) => buildListBundle(ctx(u), p),
 			buyBundleOp: (u, p, i) => buildBuyBundle(ctx(u), p, i),
 			delistBundleOp: (u, p) => buildDelistBundle(ctx(u), p),
+			listBucketOp: (u, p) => buildListBucket(ctx(u), p),
+			listBucketFlow: (u, p) => buildListBucketFlow(ctx(u), p),
+			addToBucketOp: (u, p) => buildAddToBucket(ctx(u), p),
+			buyFromBucketOp: (u, p, i) => buildBuyFromBucket(ctx(u), p, i),
+			delistBucketOp: (u, p) => buildDelistBucket(ctx(u), p),
 			proposeSwapOp: (u, p) => buildProposeSwap(ctx(u), p),
 			acceptSwapOp: (u, p, i) => buildAcceptSwap(ctx(u), p, i),
 			cancelSwapOp: (u, p) => buildCancelSwap(ctx(u), p),
@@ -491,10 +572,16 @@ export function createMarketClient(opts: CreateMarketClientOptions = {}): Market
 		broadcast,
 		broadcastBatch,
 		sell: (u, p) => broadcastBatch(buildSellNftFlow(ctx(u), p)),
+		listBucket: (u, p) => broadcastBatch(buildListBucketFlow(ctx(u), p)),
+		addToBucket: (u, p) => broadcastBatch(buildAddToBucketFlow(ctx(u), p)),
+		listBundle: (u, p) => broadcastBatch(buildListBundleFlow(ctx(u), p)),
 		auction: (u, p) => broadcastBatch(buildAuctionNftFlow(ctx(u), p)),
 		rental: (u, p) => broadcastBatch(buildRentalNftFlow(ctx(u), p)),
 		mintSpotListing: (u, p) => broadcastBatch(buildMintSpotFlow(ctx(u), p)),
+		acceptOffer: (u, p) => broadcastBatch(buildAcceptOfferFlow(ctx(u), p)),
+		acceptCollectionOffer: (u, p) => broadcastBatch(buildAcceptCollectionOfferFlow(ctx(u), p)),
 		buyWithPayment: (u, p) => broadcastBatch(buildBuyWithPayment(ctx(u), p)),
+		buyFromBucketWithPayment: (u, p) => broadcastBatch(buildBuyFromBucketWithPayment(ctx(u), p)),
 		sellToken: (u, p) => broadcastBatch(buildSellTokenFlow(ctx(u), p)),
 		buyTokenWithPayment: (u, p) => broadcastBatch(buildBuyTokenWithPayment(ctx(u), p))
 	};
