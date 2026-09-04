@@ -46,6 +46,20 @@ export interface NftMultiPickerProps {
 	 * bundle is fixed at creation, so only the mystery sale can say it.
 	 */
 	overLimitNote?: string;
+	/**
+	 * Units a mystery sale already holds, keyed `contractId:tokenId`.
+	 *
+	 * Anything listed here is shown with its count but cannot be picked,
+	 * because `addToBucket` aborts the WHOLE call on a token the bucket already
+	 * stocks ("Token ID already stocked in this bucket") — and the check is
+	 * bucket-wide, not per stack. Marking them is the difference between seeing
+	 * that up front and having the transaction fail after it is signed.
+	 *
+	 * A Map rather than a callback on purpose: every caller writes its filters
+	 * as inline arrows, and a function in this memo's deps would rebuild the
+	 * groups on every render. The form memoises the Map once.
+	 */
+	stocked?: Map<string, number>;
 }
 
 /** A template's worth of tokens, folded into one tile. */
@@ -55,9 +69,12 @@ interface EditionGroup {
 	label: string;
 	/** The tile's art and collection come from the first token. */
 	lead: NftItem;
+	/** Tokens that can still be added — an already-stocked one is excluded. */
 	tokens: NftItem[];
-	/** Units across every token in the group. */
+	/** Units across every ADDABLE token in the group. */
 	available: number;
+	/** Units of this template the sale already holds, for the tile's badge. */
+	stocked: number;
 	/** Units currently picked from this group. */
 	picked: number;
 }
@@ -69,6 +86,7 @@ function MultiTile({
 	imageUrl,
 	picked,
 	dimmed,
+	inSale,
 	pickedAmount,
 	onToggle,
 	onAmountChange
@@ -77,6 +95,8 @@ function MultiTile({
 	imageUrl: string | null;
 	picked: boolean;
 	dimmed: boolean;
+	/** Units of this exact token the sale already holds; >0 makes it unpickable. */
+	inSale: number;
 	pickedAmount: number;
 	onToggle: () => void;
 	onAmountChange: (n: number) => void;
@@ -84,32 +104,43 @@ function MultiTile({
 	const [imgFailed, setImgFailed] = useState(false);
 	const useFallback = !imageUrl || imgFailed;
 	const editioned = !item.isUnique && item.balance > 1;
+	// Already stocked: the contract refuses the whole call, so do not let it
+	// into the batch in the first place.
+	const blocked = dimmed || inSale > 0;
 	return (
 		<div
-			className={`magi-market-tile${picked ? ' selected' : ''}${dimmed ? ' dimmed' : ''}`}
+			className={`magi-market-tile${picked ? ' selected' : ''}${blocked ? ' dimmed' : ''}`}
 			role="button"
-			tabIndex={dimmed ? -1 : 0}
+			tabIndex={blocked ? -1 : 0}
 			onClick={(e) => {
-				if (dimmed) return;
+				if (blocked) return;
 				// Don't toggle when the user is just adjusting amount inputs.
 				const t = e.target as HTMLElement;
 				if (t.tagName === 'INPUT' || t.tagName === 'BUTTON') return;
 				onToggle();
 			}}
 			onKeyDown={(e) => {
-				if (dimmed) return;
+				if (blocked) return;
 				if (e.key === 'Enter' || e.key === ' ') {
 					e.preventDefault();
 					onToggle();
 				}
 			}}
-			style={dimmed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+			style={blocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
 		>
 			<div className={`magi-market-tile-image ${useFallback ? 'fallback' : ''}`}>
 				{useFallback ? (
 					<img src={magiSvg} alt={`#${item.tokenId}`} className="magi-market-tile-fallback-img" />
 				) : (
 					<img src={imageUrl as string} alt={`#${item.tokenId}`} loading="lazy" decoding="async" onError={() => setImgFailed(true)} />
+				)}
+				{inSale > 0 && (
+					<span
+						className="magi-market-tile-badge stocked"
+						title="Already in this sale — a token cannot be stocked twice"
+					>
+						{inSale} in sale
+					</span>
 				)}
 				{picked && (
 					<span
@@ -192,24 +223,28 @@ function GroupTile({
 	const useFallback = !imageUrl || imgFailed;
 	const picked = group.picked > 0;
 	const many = group.tokens.length > 1 || group.available > 1;
+	// Every edition of this template is already in the sale: there is nothing
+	// left to add, so the tile shows what is in and stops accepting clicks.
+	const exhausted = group.stocked > 0 && group.tokens.length === 0;
+	const blocked = dimmed || exhausted;
 	return (
 		<div
-			className={`magi-market-tile${picked ? ' selected' : ''}${dimmed ? ' dimmed' : ''}`}
+			className={`magi-market-tile${picked ? ' selected' : ''}${blocked ? ' dimmed' : ''}`}
 			role="button"
-			tabIndex={dimmed ? -1 : 0}
+			tabIndex={blocked ? -1 : 0}
 			onClick={(e) => {
-				if (dimmed) return;
+				if (blocked) return;
 				if ((e.target as HTMLElement).tagName === 'BUTTON') return;
 				onPick();
 			}}
 			onKeyDown={(e) => {
-				if (dimmed) return;
+				if (blocked) return;
 				if (e.key === 'Enter' || e.key === ' ') {
 					e.preventDefault();
 					onPick();
 				}
 			}}
-			style={dimmed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+			style={blocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
 		>
 			<div className={`magi-market-tile-image ${useFallback ? 'fallback' : ''}`}>
 				{useFallback ? (
@@ -226,11 +261,23 @@ function GroupTile({
 				{picked && (
 					<span className="magi-market-tile-badge">{many ? `${group.picked} in` : 'in'}</span>
 				)}
+				{group.stocked > 0 && (
+					<span
+						className="magi-market-tile-badge stocked"
+						title={`${group.stocked} already in this sale — a token cannot be stocked twice`}
+					>
+						{group.stocked} in sale
+					</span>
+				)}
 			</div>
 			<div className="magi-market-tile-id" title={group.label}>{group.label}</div>
 			<div className="magi-market-tile-row">
 				<span className="magi-market-tile-balance">
-					{many ? `${group.available} available` : 'one of a kind'}
+					{exhausted
+						? 'already in the sale'
+						: many
+							? `${group.available} available`
+							: 'one of a kind'}
 				</span>
 			</div>
 			{picked && (
@@ -259,6 +306,7 @@ export function NftMultiPicker({
 	lockCollection,
 	filterItem,
 	max,
+	stocked,
 	disabled,
 	groupEditions = false,
 	overLimitNote
@@ -419,17 +467,28 @@ export function NftMultiPicker({
 			// A token with no template stands alone — it is its own group, so
 			// uniques keep behaving exactly as they did before.
 			const k = tpl ? `${i.contractId}:tpl:${tpl}` : key(i);
+			// Units the sale already holds are counted for the badge but kept
+			// OUT of `tokens`, so every downstream sum — what is available, what
+			// "All" adds, which editions get filled — works on what can actually
+			// be stocked. Leaving them in made "All 20" build a batch the
+			// contract rejects outright.
+			const inSale = stocked?.get(key(i)) ?? 0;
 			const at = by.get(k);
 			if (at) {
-				at.tokens.push(i);
-				at.available += i.balance;
+				if (inSale > 0) {
+					at.stocked += inSale;
+				} else {
+					at.tokens.push(i);
+					at.available += i.balance;
+				}
 			} else {
 				by.set(k, {
 					key: k,
 					label: tpl ?? `#${i.tokenId}`,
 					lead: i,
-					tokens: [i],
-					available: i.balance,
+					tokens: inSale > 0 ? [] : [i],
+					available: inSale > 0 ? 0 : i.balance,
+					stocked: inSale,
 					picked: 0
 				});
 			}
@@ -441,7 +500,7 @@ export function NftMultiPicker({
 			);
 		}
 		return Array.from(by.values());
-	}, [groupEditions, filtered, templates, value]);
+	}, [groupEditions, filtered, templates, value, stocked]);
 
 	/**
 	 * Spread `n` units across a group's tokens, filling each to its balance
@@ -625,6 +684,7 @@ export function NftMultiPicker({
 									imageUrl={imgFor(i)}
 									picked={picked}
 									dimmed={dimmed}
+									inSale={stocked?.get(k) ?? 0}
 									pickedAmount={pickedAmount}
 									onToggle={() => toggle(i)}
 									onAmountChange={(n) => setAmount(k, n)}

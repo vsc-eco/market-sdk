@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
+import type { BucketEntry, BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
 import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Modal } from '../components/Modal.js';
 import { NftMultiPicker, type NftMultiPick } from '../components/NftMultiPicker.js';
@@ -71,6 +71,39 @@ export function AddToBucketForm({
 		};
 	}, [client, bucket.bucketId, stacks]);
 	const known = stacks ?? fetched ?? undefined;
+
+	/**
+	 * What the sale already holds, so the picker can mark it.
+	 *
+	 * `addToBucket` aborts the entire call on a token the bucket already stocks,
+	 * and the check is bucket-WIDE — re-adding a common to a different stack
+	 * fails just the same. Without this the seller finds out after signing.
+	 */
+	const [entries, setEntries] = useState<BucketEntry[] | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		client.provider
+			.getBucketEntries(bucket.bucketId)
+			.then((rows) => {
+				if (!cancelled) setEntries(rows);
+			})
+			.catch(() => {
+				/* tiles simply go unmarked */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [client, bucket.bucketId]);
+
+	// Memoised: the picker keys its group memo on this, and a fresh Map every
+	// render would rebuild the groups every render.
+	const stockedMap = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const e of entries ?? []) {
+			m.set(`${bucket.nftContract}:${e.tokenId}`, e.amountStocked);
+		}
+		return m;
+	}, [entries, bucket.nftContract]);
 
 	// Which stacks exist. A sale with one stack has nothing to choose.
 	const stackIds = useMemo(() => {
@@ -191,6 +224,7 @@ export function AddToBucketForm({
 												filterItem={(it) => canTransferNft(it, username)}
 												// The 24 is per TRANSACTION across every stack, not
 												// per stack — see the same split in the wizard.
+												stocked={stockedMap}
 												max={Math.max(mine.length, budget - (totalPicks - mine.length))}
 												overLimitNote={`One transaction carries ${MAX_PER_CALL} entries — send this batch, then open this form again for the rest. Room for ${room} more in this sale.`}
 												disabled={submitting}
@@ -213,8 +247,9 @@ export function AddToBucketForm({
 							</label>
 
 							<p className="magi-market-field-hint">
-								A token already in this sale cannot be added again — restocking appends new
-								ones. {totalPicks > 0 ? `${totalPicks} of ${budget} entries used in this batch.` : `Room for ${room} more entries.`}
+								Anything the sale already holds is marked “in sale” and cannot be picked —
+								a token cannot be stocked twice, in this or any other stack.{' '}
+								{totalPicks > 0 ? `${totalPicks} of ${budget} entries used in this batch.` : `Room for ${room} more entries.`}
 							</p>
 
 							{error && <p className="magi-market-status error">{error}</p>}

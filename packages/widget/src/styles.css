@@ -2951,3 +2951,12 @@
 	flex: 0 1 auto;
 	min-width: 0;
 }
+/* Already in the mystery sale. Top-RIGHT because the grouped tile's "in"
+   badge owns the left corner and both can show at once — some editions of a
+   template stocked, others still pickable. Amber rather than the accent: this
+   is a reason the tile is unavailable, not a selection. */
+.magi-market-tile-badge.stocked {
+	left: auto;
+	right: 0.35rem;
+	background: rgba(180, 83, 9, 0.9);
+}
