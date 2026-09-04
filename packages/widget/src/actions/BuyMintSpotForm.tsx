@@ -4,6 +4,8 @@ import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 
 export interface BuyMintSpotFormProps {
 	client: MarketClient;
@@ -45,11 +47,13 @@ export function BuyMintSpotForm({ client, username, listing, onSuccess, onClose 
 		}
 	}, [amount, listing.pricePerSpot]);
 
+	const funds = useAffordability(client.config, username, listing.paymentToken, totalMicro);
 	const valid =
 		Number.isInteger(Number(amount)) &&
 		Number(amount) > 0 &&
 		Number(amount) <= max &&
-		!!totalMicro;
+		!!totalMicro &&
+		funds.ok;
 
 	async function handleSubmit() {
 		if (!valid || submitting || !totalMicro) return;
@@ -98,6 +102,8 @@ export function BuyMintSpotForm({ client, username, listing, onSuccess, onClose 
 					Total: {tokenMeta.format(listing.paymentToken, totalMicro)} {paySym}
 				</p>
 			)}
+
+			<FundsNote funds={funds} paymentToken={listing.paymentToken} tokenMeta={tokenMeta} />
 
 			{error && <p className="magi-market-status error">{error}</p>}
 

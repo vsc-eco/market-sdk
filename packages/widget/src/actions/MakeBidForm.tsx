@@ -4,6 +4,8 @@ import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 import { dutchCurrentPrice, formatCountdown, useChainClock } from '../components/useChainClock.js';
 
 export interface MakeBidFormProps {
@@ -82,7 +84,12 @@ export function MakeBidForm({ client, username, auction, onSuccess, onClose }: M
 	);
 	const dutchEnded = secsLeft != null && secsLeft <= 0;
 
-	const valid = isDutch
+	// A Dutch bid pays the CURRENT clock price, an English bid pays what was
+	// typed — so the amount checked has to be the one the op will carry.
+	const bidMicro = isDutch ? liveDutchMicro : englishMicro;
+	const funds = useAffordability(client.config, username, paymentToken, bidMicro);
+
+	const valid = funds.ok && (isDutch
 		? !!liveDutchMicro && !dutchEnded
 		: !!englishMicro && (() => {
 				try {
@@ -90,7 +97,7 @@ export function MakeBidForm({ client, username, auction, onSuccess, onClose }: M
 				} catch {
 					return false;
 				}
-			})();
+			})());
 
 	async function handleSubmit() {
 		if (!valid || submitting) return;
@@ -153,6 +160,7 @@ export function MakeBidForm({ client, username, auction, onSuccess, onClose }: M
 						/>
 					</Field>
 					{dutchEnded && <p className="magi-market-status error">Auction has ended.</p>}
+					<FundsNote funds={funds} paymentToken={paymentToken} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>
 						{submitting ? 'Buying…' : 'Buy now'}
@@ -166,6 +174,7 @@ export function MakeBidForm({ client, username, auction, onSuccess, onClose }: M
 					>
 						<TextInput inputMode="decimal" value={englishBid} onChange={setEnglishBid} placeholder="0.500" disabled={submitting} />
 					</Field>
+					<FundsNote funds={funds} paymentToken={paymentToken} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>
 						{submitting ? 'Bidding…' : 'Place bid'}

@@ -7,6 +7,8 @@ import { TokenPicker } from '../components/TokenPicker.js';
 import { SelectPicker, type SelectOption } from '../components/SelectPicker.js';
 import { CollectionNftPicker, ANY_TOKEN } from '../components/CollectionNftPicker.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 import { useCollectionMeta } from '../components/useCollectionMeta.js';
 import { useCollectionTokens } from '../components/useCollectionTokens.js';
 import { BlockDurationInput } from '../components/BlockDurationInput.js';
@@ -89,8 +91,11 @@ export function MakeOfferForm({
 	const chosenHolderCount =
 		tokens.find((t) => t.tokenId === resolvedTokenId)?.holders.length ?? 0;
 
+	const funds = useAffordability(client.config, username, paymentToken.trim(), totalMicro);
+
 	const valid = useMemo(
 		() =>
+			funds.ok &&
 			nftContract.trim() !== '' &&
 			tokenChosen &&
 			Number(amount) > 0 &&
@@ -198,6 +203,7 @@ export function MakeOfferForm({
 						disabled={submitting}
 					/>
 
+					<FundsNote funds={funds} paymentToken={paymentToken.trim()} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>

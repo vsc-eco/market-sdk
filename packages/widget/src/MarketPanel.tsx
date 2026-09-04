@@ -1039,6 +1039,25 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		return () => document.removeEventListener('mousedown', onDoc);
 	}, [helpOpen]);
 	const balances = useUserBalances(config, username);
+	/**
+	 * Can the user cover this price right now? Tiles buy straight from the
+	 * browse list (a bucket draw has no form to check in), so the panel — which
+	 * already holds balances for the affordability filter — answers for them.
+	 * Unknown counts as affordable: the contract stays the authority.
+	 */
+	const canAfford = useCallback(
+		(paymentToken: string, micro: string | null | undefined) => {
+			if (!username || !micro) return true;
+			const bal = balances.balanceOf(paymentToken);
+			if (bal === null) return true;
+			try {
+				return BigInt(micro) <= bal;
+			} catch {
+				return true;
+			}
+		},
+		[balances, username]
+	);
 	// Seller-side gate for the offers tab: you can only fulfil an offer for
 	// an NFT you actually hold.
 	const nftHoldings = useUserNftHoldings(config, username);
@@ -2087,6 +2106,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 										onSheet={setSheet}
 										onCancel={cancelListing}
 										onDraw={drawFromBucket}
+										canAfford={canAfford}
 									/>
 								))}
 							</CollectionGroup>

@@ -4,6 +4,8 @@ import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 
 export interface BuyTokenFormProps {
 	client: MarketClient;
@@ -50,7 +52,8 @@ export function BuyTokenForm({ client, username, listing, onSuccess, onClose }: 
 		}
 	}, [amount, listing.pricePerUnit]);
 
-	const valid = isPosInt(amount) && BigInt(amount.trim()) <= remaining && total !== null;
+	const funds = useAffordability(client.config, username, listing.paymentToken, total);
+	const valid = isPosInt(amount) && BigInt(amount.trim()) <= remaining && total !== null && funds.ok;
 
 	async function handleSubmit() {
 		if (!valid || submitting || !total) return;
@@ -101,6 +104,7 @@ export function BuyTokenForm({ client, username, listing, onSuccess, onClose }: 
 					</Field>
 					{total && <p className="magi-market-field-hint">Total: {tokenMeta.format(listing.paymentToken, total)} {paySym}</p>}
 
+					<FundsNote funds={funds} paymentToken={listing.paymentToken} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>

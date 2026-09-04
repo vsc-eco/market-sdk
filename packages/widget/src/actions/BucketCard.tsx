@@ -5,6 +5,8 @@ import { createNftClient, 	type NftItem
 import { tokenConfigFrom } from '../components/tokenConfig.js';
 import { Spinner } from '../components/Spinner.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 import { stackRole } from '../components/stackRole.js';
 import magiSvg from '../assets/magi.svg';
 
@@ -302,6 +304,21 @@ export function BucketCard({
 			.sort((a, b) => a.stack - b.stack);
 	}, [entries, stackUnits]);
 
+	// Two prices, two buttons, two separate answers: affording a single draw
+	// says nothing about affording a pack.
+	const drawFunds = useAffordability(
+		client.config,
+		username,
+		bucket.paymentToken,
+		singlesOn ? bucket.pricePerDraw : null
+	);
+	const packFunds = useAffordability(
+		client.config,
+		username,
+		bucket.paymentToken,
+		packsOn ? bucket.pricePerPack : null
+	);
+
 	/** A pack needs every promised slot filled, so check stacks not the total. */
 	const packFillable = useMemo(() => {
 		if (!packsOn || bucket.packDraws.length === 0) return false;
@@ -336,7 +353,8 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							disabled={!username || busy || bucket.unitsLeft === 0}
+							disabled={!username || busy || bucket.unitsLeft === 0 || !drawFunds.ok}
+							title={drawFunds.ok ? undefined : 'Not enough funds for a draw'}
 							onClick={onDraw}
 						>
 							Draw one
@@ -346,8 +364,14 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							disabled={!username || busy || !packFillable}
-							title={packFillable ? undefined : 'A guaranteed stack has run out'}
+							disabled={!username || busy || !packFillable || !packFunds.ok}
+							title={
+								!packFillable
+									? 'A guaranteed stack has run out'
+									: packFunds.ok
+										? undefined
+										: 'Not enough funds for a pack'
+							}
 							onClick={onBuyPack}
 						>
 							Buy pack ({bucket.packSize})
@@ -365,6 +389,13 @@ export function BucketCard({
 		// the layout on a phone. Prices and actions get a row that wraps.
 		<div className="magi-market-bucketcard">
 			<div className="magi-market-bucketcard-bar">{action}</div>
+			{!mine && (
+				<FundsNote
+					funds={drawFunds.ok ? packFunds : drawFunds}
+					paymentToken={bucket.paymentToken}
+					tokenMeta={tokenMeta}
+				/>
+			)}
 			<div className="magi-market-row-sub" style={{ padding: '0 0.2rem 0.5rem' }}>
 				{bucket.unitsLeft} of {bucket.unitsStocked} left
 				{packsOn && bucket.packDraws.length > 0 && (

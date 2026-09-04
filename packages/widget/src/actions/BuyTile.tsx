@@ -55,6 +55,8 @@ export interface BuyTileProps {
 	onSheet: (sheet: BuySheetRequest) => void;
 	onCancel: (kind: 'listing' | 'bundle' | 'bucket' | 'mintspots', id: number) => void;
 	onDraw: (bucket: BucketListing, mode: 'single' | 'pack') => void;
+	/** Whether the user can cover a price. Unknown counts as affordable. */
+	canAfford: (paymentToken: string, micro: string | null | undefined) => boolean;
 }
 
 /** The sheets a tile can ask the panel to open. */
@@ -82,7 +84,8 @@ export function BuyTile({
 	drawing,
 	onSheet,
 	onCancel,
-	onDraw
+	onDraw,
+	canAfford
 }: BuyTileProps): ReactNode {
 
 		const mine = isSelf(it.seller);
@@ -215,11 +218,20 @@ export function BuyTile({
 							</>
 						) : (
 							<>
-								<button type="button" className="magi-market-submit"
-									disabled={!username || drawing === b.bucketId || b.unitsStocked === 0}
-									onClick={() => onDraw(b, singles ? 'single' : 'pack')}>
-									{drawing === b.bucketId ? 'Drawing…' : singles ? 'Draw' : 'Pack'}
-								</button>
+								{(() => {
+									// This button buys immediately — there is no form in
+									// between to catch an empty wallet.
+									const cost = singles ? b.pricePerDraw : b.pricePerPack;
+									const afford = canAfford(b.paymentToken, cost);
+									return (
+										<button type="button" className="magi-market-submit"
+											disabled={!username || drawing === b.bucketId || b.unitsStocked === 0 || !afford}
+											title={afford ? undefined : `Not enough ${tokenMeta.symbol(b.paymentToken)}`}
+											onClick={() => onDraw(b, singles ? 'single' : 'pack')}>
+											{drawing === b.bucketId ? 'Drawing…' : singles ? 'Draw' : 'Pack'}
+										</button>
+									);
+								})()}
 								<button type="button" className="magi-market-submit ghost"
 									onClick={() => onSheet({ kind: 'bucketDetail', bucket: b })}>Odds</button>
 							</>
