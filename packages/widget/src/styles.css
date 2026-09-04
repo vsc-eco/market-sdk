@@ -1965,17 +1965,10 @@
 	flex-wrap: wrap;
 	min-width: 0;
 }
-/* Open: the toggle is just a caret, so it must NOT flex — otherwise it expands
-   and shoves the name input to the far edge with a lake of space between. */
-.magi-market-stack.open .magi-market-stack-toggle {
-	flex: 0 0 auto;
-}
-.magi-market-stack.open .magi-market-stack-head > input {
-	flex: 1 1 12rem;
-	min-width: 0;
-	max-width: 20rem;
-}
-/* The stack name grows; the slot count stays small — it is a 1-2 digit field and
+/* The name input this used to make room for is gone (stacks are numbered, not
+   named), so an open header is title + caret + the slot field: the toggle takes
+   the row and the slot count stays small. */
+/* The title grows; the slot count stays small — it is a 1-2 digit field and
    a full-width input would imply otherwise. */
 .magi-market-stack-head > :first-child {
 	flex: 1 1 8rem;
