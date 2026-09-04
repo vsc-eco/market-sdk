@@ -641,6 +641,25 @@ export function NftMultiPicker({
 				).length;
 				const asked = Math.max(0, Math.floor(Number(amountText) || 0));
 				const overCap = asked > cap;
+				/**
+				 * Entries `n` copies would actually consume.
+				 *
+				 * Copies are not entries and the limit counts entries: 100 copies
+				 * of ONE card is a single entry, while 100 one-of-a-kinds is 100
+				 * of them. "All 100" is therefore correct in the first case and
+				 * impossible in the second, which is indistinguishable from the
+				 * dialog unless it says so.
+				 */
+				const entriesUsed = (n: number) => {
+					let left = n;
+					let used = 0;
+					for (const t of amountFor.tokens) {
+						if (left <= 0) break;
+						used++;
+						left -= Math.min(left, t.balance);
+					}
+					return used;
+				};
 				return (
 				<div
 					className="magi-market-modal"
@@ -679,6 +698,16 @@ export function NftMultiPicker({
 						{/* The limit counts ENTRIES, and one edition is one entry
 						    however many copies it holds — so say what fits rather
 						    than refusing the number after the fact. */}
+						{max != null && asked > 0 && (
+							<p className="magi-market-field-hint">
+								{asked} cop{asked === 1 ? 'y' : 'ies'} · uses {entriesUsed(asked)} of the {max}{' '}
+								entr{max === 1 ? 'y' : 'ies'} one transaction carries
+								{usedElsewhere > 0
+									? `, ${usedElsewhere} already spent on other picks`
+									: ''}
+								.
+							</p>
+						)}
 						{cap < amountFor.available && (
 							<p className={`magi-market-field-hint${overCap ? ' magi-market-cap-hit' : ''}`}>
 								Up to {cap} here — one transaction carries {max} editions

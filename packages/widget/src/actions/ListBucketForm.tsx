@@ -426,7 +426,17 @@ export function ListBucketForm({
 													groupEditions
 													lockCollection={lockCollection}
 													filterItem={(it) => canTransferNft(it, username)}
-													max={MAX_ENTRIES}
+													// The 24-entry ceiling is on the TRANSACTION, not on one
+													// stack: three stacks of 24 is 72 entries and the contract
+													// refuses all of it. Each picker therefore gets what is
+													// left once the OTHER stacks keep theirs, so the limit is
+													// hit inside the picker — where the seller can see it —
+													// rather than as a validation error two steps later.
+													max={Math.max(
+														stack.picks.length,
+														MAX_ENTRIES - (totalEntries - stack.picks.length)
+													)}
+													overLimitNote={`One transaction opens a sale with ${MAX_ENTRIES} entries — put the rest in from the sale's own "Add" button once it exists, up to 512 in total.`}
 													disabled={submitting}
 												/>
 											</>
