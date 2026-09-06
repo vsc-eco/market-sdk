@@ -1,5 +1,11 @@
 # @vsc.eco/market-core
 
+## 0.0.3
+
+### Patch Changes
+
+- 2a15b34: Point `MAINNET_CONFIG` at the deployed mainnet magi-market contract (`vsc1BdZFXb8HdLptKUamNG4nL74hSb6UUBEiQA`, deployed 2026-07-22) instead of the testnet placeholder, and order the okinoko market-view indexer first for mainnet reads so listings don't silently resolve empty. `market-sdk` and `market-widget` republish via the internal `workspace:*` dependency bump.
+
 ## 0.0.2
 
 ### Patch Changes
