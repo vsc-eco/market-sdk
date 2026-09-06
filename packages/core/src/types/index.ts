@@ -71,16 +71,17 @@ export function resolveMarketContractId(config: MagiConfig): string {
 
 export const MAINNET_CONFIG: MagiConfig = {
 	network: 'vsc-mainnet',
-	// NOTE: the magi-market contract is NOT deployed on mainnet yet. This
-	// id is a placeholder so the client constructs and the read side / NFT
-	// picker work against the mainnet indexer; market WRITE actions point
-	// at a contract that doesn't exist on mainnet and will fail on
-	// broadcast until a mainnet deployment exists. Override
-	// `marketContractId` once it's deployed.
-	marketContractId: 'vsc1BnMAaeUzhzVcfKMDG5vphthhymk6irjLNq',
+	// Deployed on mainnet 2026-07-22 (owner hive:magi.contracts).
+	marketContractId: 'vsc1BdZFXb8HdLptKUamNG4nL74hSb6UUBEiQA',
+	// The okinoko indexer carries the `magi_market_*` fold views for this
+	// contract and is the primary; the milohpr indexer is a generic-VSC
+	// fallback that does not project the market views, so it must come
+	// second. Ordering matters: failover fires on error, NOT on an empty
+	// result, so a generic indexer first would return "no listings"
+	// silently. Mirrors TESTNET_CONFIG below.
 	indexerHasuraUrls: [
-		'https://indexer.magi.milohpr.com/v1/graphql',
-		'https://api.okinoko.io/hasura/v1/graphql'
+		'https://api.okinoko.io/hasura/v1/graphql',
+		'https://indexer.magi.milohpr.com/v1/graphql'
 	],
 	gqlUrls: [
 		'https://api.vsc.eco/api/v1/graphql',
