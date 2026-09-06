@@ -393,10 +393,16 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const isNarrow = panelWidth < SUBTABS_STACK_AT;
 	/** Selected collection in the split layout; null = fall back to the first. */
 	const [exploreColl, setExploreColl] = useState<string | null>(null);
-	// Sub-scope inside each tab: "others" = items NOT owned by the user
-	// (the marketplace browsing view), "yours" = items the user themselves
-	// listed/seeded. "others" first matches the marketplace-first mindset.
-	const [scope, setScope] = useState<'others' | 'yours'>('others');
+	// Sub-scope inside each tab: "all" = no owner filter at all, "others" =
+	// items NOT owned by the user (the marketplace browsing view), "yours" =
+	// items the user themselves listed/seeded.
+	//
+	// "all" is the default because it is the only one that never hides
+	// anything: browsing opened on "others", so a seller looking at the market
+	// could not see their own listings among everyone else's without knowing to
+	// switch tabs — and with nobody connected "others" and "all" show the same
+	// set anyway, so the default costs nothing when signed out.
+	const [scope, setScope] = useState<'all' | 'others' | 'yours'>('all');
 	const [listings, setListings] = useState<Listing[]>([]);
 	const [offers, setOffers] = useState<Offer[]>([]);
 	const [auctions, setAuctions] = useState<Auction[]>([]);
@@ -491,7 +497,11 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	const exploreScoped = useMemo(
 		() =>
 			exploreTokens.filter((t) =>
-				scope === 'yours' ? t.myUnits > 0n : t.holders.some((a) => !isSelf(a))
+				scope === 'all'
+					? true
+					: scope === 'yours'
+						? t.myUnits > 0n
+						: t.holders.some((a) => !isSelf(a))
 			),
 		[exploreTokens, scope, me] // eslint-disable-line react-hooks/exhaustive-deps
 	);
@@ -1010,7 +1020,15 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 	// runs on the full lists (above), so flipping between Others/Yours is
 	// instant and re-uses cached images.
 	const inScope = (owner: string) =>
-		scope === 'yours' ? isSelf(owner) : !isSelf(owner);
+		scope === 'all' ? true : scope === 'yours' ? isSelf(owner) : !isSelf(owner);
+
+	/**
+	 * Empty-state copy for the active scope. "Nothing from others" is a lie
+	 * under "All" — it is the whole market that is empty — and the difference
+	 * matters, because one of them means "switch tabs" and the other does not.
+	 */
+	const emptyCopy = (yours: string, others: string, all: string) =>
+		scope === 'yours' ? yours : scope === 'others' ? others : all;
 	const scopedListings = useMemo(() => listings.filter((l) => inScope(l.seller)), [listings, scope, me]); // eslint-disable-line react-hooks/exhaustive-deps
 	// Offers scope semantics differ from the seller-side tabs: "yours" means
 	// offers I as the BUYER made; "others" means offers made BY someone else
@@ -1039,6 +1057,25 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 		return () => document.removeEventListener('mousedown', onDoc);
 	}, [helpOpen]);
 	const balances = useUserBalances(config, username);
+	/**
+	 * Can the user cover this price right now? Tiles buy straight from the
+	 * browse list (a bucket draw has no form to check in), so the panel — which
+	 * already holds balances for the affordability filter — answers for them.
+	 * Unknown counts as affordable: the contract stays the authority.
+	 */
+	const canAfford = useCallback(
+		(paymentToken: string, micro: string | null | undefined) => {
+			if (!username || !micro) return true;
+			const bal = balances.balanceOf(paymentToken);
+			if (bal === null) return true;
+			try {
+				return BigInt(micro) <= bal;
+			} catch {
+				return true;
+			}
+		},
+		[balances, username]
+	);
 	// Seller-side gate for the offers tab: you can only fulfil an offer for
 	// an NFT you actually hold.
 	const nftHoldings = useUserNftHoldings(config, username);
@@ -1944,14 +1981,14 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						)}
 					</div>
 					<div className="magi-market-subtabs">
-						{(['others', 'yours'] as const).map((s) => (
+						{(['all', 'others', 'yours'] as const).map((s) => (
 							<button
 								key={s}
 								type="button"
 								className={`magi-market-subtab ${scope === s ? 'active' : ''}`}
 								onClick={() => setScope(s)}
 							>
-								{s === 'others' ? 'Others' : 'Yours'}
+								{s === 'all' ? 'All' : s === 'others' ? 'Others' : 'Yours'}
 							</button>
 						))}
 					</div>
@@ -2049,9 +2086,11 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 
 					{buyGroups.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours'
-								? "You don't have anything on sale."
-								: 'Nothing on sale from others right now.'}
+							{emptyCopy(
+								"You don't have anything on sale.",
+								'Nothing on sale from others right now.',
+								'Nothing is on sale right now.'
+							)}
 						</div>
 					) : (
 						buyGroups.map((g) => (
@@ -2087,6 +2126,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 										onSheet={setSheet}
 										onCancel={cancelListing}
 										onDraw={drawFromBucket}
+										canAfford={canAfford}
 									/>
 								))}
 							</CollectionGroup>
@@ -2098,7 +2138,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				{section === 'market' && !err && !loading && tab === 'offers' && (
 					filteredOffers.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours' ? "You haven't made any offers yet." : 'No open offers from others.'}
+							{emptyCopy("You haven't made any offers yet.", 'No open offers from others.', 'No open offers.')}
 						</div>
 					) : (
 						groupByContract(
@@ -2190,7 +2230,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				{section === 'market' && !err && !loading && tab === 'auctions' && (
 					filteredAuctions.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours' ? "You don't have active auctions." : 'No active auctions from others.'}
+							{emptyCopy("You don't have active auctions.", 'No active auctions from others.', 'No active auctions.')}
 						</div>
 					) : (
 						groupByContract(filteredAuctions, collMeta.name).map((g) => (
@@ -2295,7 +2335,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				{section === 'market' && !err && !loading && tab === 'tokens' && (
 					filteredTokenListings.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours' ? "You don't have active token sales." : 'No active token sales from others.'}
+							{emptyCopy("You don't have active token sales.", 'No active token sales from others.', 'No active token sales.')}
 						</div>
 					) : (
 						<div className="magi-market-list">
@@ -2354,9 +2394,11 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 						<div className="magi-market-state">
 							{exploreQuery.trim()
 								? `Nothing matches “${exploreQuery.trim()}”.`
-								: scope === 'yours'
-									? "You don't hold any NFTs yet."
-									: 'No NFTs found on this network.'}
+								: emptyCopy(
+										"You don't hold any NFTs yet.",
+										'No NFTs found on this network.',
+										'No NFTs found on this network.'
+									)}
 						</div>
 					) : (
 						<>
@@ -2454,7 +2496,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				{section === 'market' && !err && !loading && tab === 'swaps' && (
 					scopedSwaps.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours' ? "You haven't proposed any swaps." : 'No open swap proposals from others.'}
+							{emptyCopy("You haven't proposed any swaps.", 'No open swap proposals from others.', 'No open swap proposals.')}
 						</div>
 					) : (
 						<div className="magi-market-list">
@@ -2495,7 +2537,7 @@ export function MagiMarketPanel(props: MagiMarketPanelProps) {
 				{section === 'market' && !err && !loading && tab === 'rentals' && (
 					scopedRentals.length === 0 ? (
 						<div className="magi-market-state">
-							{scope === 'yours' ? "You don't have active rental listings." : 'No rental listings from others.'}
+							{emptyCopy("You don't have active rental listings.", 'No rental listings from others.', 'No rental listings.')}
 						</div>
 					) : (
 						groupByContract(scopedRentals, collMeta.name).map((g) => (

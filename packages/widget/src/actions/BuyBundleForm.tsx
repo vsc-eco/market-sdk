@@ -3,6 +3,8 @@ import type { BundleListing, MarketClient } from '@vsc.eco/market-sdk';
 import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 
 export interface BuyBundleFormProps {
 	client: MarketClient;
@@ -26,6 +28,8 @@ export function BuyBundleForm({ client, username, bundle, onSuccess, onClose }: 
 	const paySym = tokenMeta.symbol(bundle.paymentToken);
 	const priceHuman = tokenMeta.format(bundle.paymentToken, bundle.price);
 	const isNative = NATIVE_TOKENS.has((bundle.paymentToken || '').toLowerCase());
+	// A bundle is one fixed price, so there is nothing to multiply.
+	const funds = useAffordability(client.config, username, bundle.paymentToken, bundle.price);
 
 	const itemsCount = bundle.items.length;
 	const totalUnits = bundle.items.reduce((s, it) => s + (it.amount || 0), 0);
@@ -63,6 +67,8 @@ export function BuyBundleForm({ client, username, bundle, onSuccess, onClose }: 
 				Total: {priceHuman} {paySym}
 			</p>
 
+			<FundsNote funds={funds} paymentToken={bundle.paymentToken} tokenMeta={tokenMeta} />
+
 			{error && <p className="magi-market-status error">{error}</p>}
 
 			{txId ? (
@@ -71,7 +77,7 @@ export function BuyBundleForm({ client, username, bundle, onSuccess, onClose }: 
 					<button type="button" className="magi-market-submit ghost" onClick={onClose}>Done</button>
 				</>
 			) : (
-				<button type="button" className="magi-market-submit" disabled={submitting} onClick={handleSubmit}>
+				<button type="button" className="magi-market-submit" disabled={submitting || !funds.ok} onClick={handleSubmit}>
 					{submitting ? 'Buying…' : 'Buy bundle'}
 				</button>
 			)}

@@ -5,6 +5,8 @@ import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { SelectPicker, type SelectOption } from '../components/SelectPicker.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 import { useCollectionMeta } from '../components/useCollectionMeta.js';
 
 export interface SweepFormProps {
@@ -161,7 +163,11 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 	const isNative = NATIVE.has((payToken || '').toLowerCase());
 
 	const maxTotalMicro = maxTotal.trim() === '' || !payToken ? null : tokenMeta.toMicro(payToken, maxTotal.trim());
-	const valid = nftContract !== '' && selected.length > 0 && !!maxTotalMicro;
+	// The contract pulls up to maxTotal, so that ceiling is what must be
+	// covered — not the current cheapest-first estimate, which can rise
+	// between building the sweep and the block that executes it.
+	const funds = useAffordability(client.config, username, paymentToken, maxTotalMicro);
+	const valid = nftContract !== '' && selected.length > 0 && !!maxTotalMicro && funds.ok;
 
 	async function handleSubmit() {
 		if (!valid || submitting || !maxTotalMicro) return;
@@ -257,6 +263,7 @@ export function SweepForm({ client, username, listings, defaultNftContract, onSu
 						</div>
 					)}
 
+					<FundsNote funds={funds} paymentToken={paymentToken} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>
 						{submitting ? 'Sweeping…' : 'Sweep'}

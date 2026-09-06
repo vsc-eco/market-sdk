@@ -4,6 +4,8 @@ import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 
 export interface BuyFormProps {
 	client: MarketClient;
@@ -55,7 +57,12 @@ export function BuyForm({ client, username, listing, onSuccess, onClose }: BuyFo
 		}
 	}, [amount, listing.pricePerUnit]);
 
-	const valid = Number.isInteger(Number(amount)) && Number(amount) > 0 && Number(amount) <= listing.amount;
+	const funds = useAffordability(client.config, username, listing.paymentToken, total);
+	const valid =
+		Number.isInteger(Number(amount)) &&
+		Number(amount) > 0 &&
+		Number(amount) <= listing.amount &&
+		funds.ok;
 
 	async function handleSubmit() {
 		if (!valid || submitting || !total) return;
@@ -98,6 +105,8 @@ export function BuyForm({ client, username, listing, onSuccess, onClose }: BuyFo
 				<TextInput type="number" inputMode="numeric" min={1} max={listing.amount} value={amount} onChange={setAmount} disabled={submitting} />
 			</Field>
 			{total && <p className="magi-market-field-hint">Total: {tokenMeta.format(listing.paymentToken, total)} {paySym}</p>}
+
+			<FundsNote funds={funds} paymentToken={listing.paymentToken} tokenMeta={tokenMeta} />
 
 			{error && <p className="magi-market-status error">{error}</p>}
 

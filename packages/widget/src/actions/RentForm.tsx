@@ -4,6 +4,8 @@ import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Field, TextInput } from '../components/Field.js';
 import { Modal } from '../components/Modal.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
 
 export interface RentFormProps {
 	client: MarketClient;
@@ -49,7 +51,8 @@ export function RentForm({ client, username, rental, onSuccess, onClose }: RentF
 		}
 	}, [rental.pricePerBlock, blocksNum, validBlocks]);
 
-	const valid = validBlocks && !!totalMicro;
+	const funds = useAffordability(client.config, username, rental.paymentToken, totalMicro);
+	const valid = validBlocks && !!totalMicro && funds.ok;
 
 	async function handleSubmit() {
 		if (!valid || submitting || !totalMicro) return;
@@ -104,6 +107,7 @@ export function RentForm({ client, username, rental, onSuccess, onClose }: RentF
 						</p>
 					)}
 
+					<FundsNote funds={funds} paymentToken={rental.paymentToken} tokenMeta={tokenMeta} />
 					{error && <p className="magi-market-status error">{error}</p>}
 
 					<button type="button" className="magi-market-submit" disabled={!valid || submitting} onClick={handleSubmit}>

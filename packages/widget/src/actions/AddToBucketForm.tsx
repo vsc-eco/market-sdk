@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
-import type { BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
+import { useEffect, useMemo, useState } from 'react';
+import type { BucketEntry, BucketListing, BucketStack, MarketClient } from '@vsc.eco/market-sdk';
 import { BroadcastResult } from '../components/BroadcastResult.js';
 import { Modal } from '../components/Modal.js';
 import { NftMultiPicker, type NftMultiPick } from '../components/NftMultiPicker.js';
 import { canTransferNft } from '../components/nftFilters.js';
+import { stackRole } from '../components/stackRole.js';
 
 /** One call takes 24 entries; a bucket holds 512 in total. */
 const MAX_PER_CALL = 24;
@@ -26,6 +27,12 @@ export interface AddToBucketFormProps {
  * at all — but the widget never exposed it, so a sale was whatever it was
  * opened with. Buyers see the odds move as stock arrives, which is the point:
  * a sale that can be topped up does not have to be built in one sitting.
+ *
+ * Laid out as the creation wizard lays out stacks — one section per stack, each
+ * with its own picker — rather than one chip row governing a single flat list.
+ * `addToBucket` takes the stack PER ENTRY, so one call can restock several
+ * stacks at once; the chip row could only ever describe one, which quietly made
+ * a two-stack top-up two transactions.
  */
 export function AddToBucketForm({
 	client,
@@ -35,33 +42,109 @@ export function AddToBucketForm({
 	onSuccess,
 	onClose
 }: AddToBucketFormProps) {
-	const [picks, setPicks] = useState<NftMultiPick[]>([]);
-	const [stack, setStack] = useState(0);
+	const [picks, setPicks] = useState<Record<number, NftMultiPick[]>>({});
+	const [openStack, setOpenStack] = useState(0);
 	const [skipApproval, setSkipApproval] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [txId, setTxId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
+	/**
+	 * The sale's stacks. The panel opens this form without them, and a header
+	 * that cannot say what a stack already holds is asking the seller to
+	 * remember — so fetch them here when the caller has none to give.
+	 */
+	const [fetched, setFetched] = useState<BucketStack[] | null>(null);
+	useEffect(() => {
+		if (stacks) return;
+		let cancelled = false;
+		client.provider
+			.getBucketStacks(bucket.bucketId)
+			.then((p) => {
+				if (!cancelled) setFetched(p);
+			})
+			.catch(() => {
+				/* headers fall back to the pack layout alone */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [client, bucket.bucketId, stacks]);
+	const known = stacks ?? fetched ?? undefined;
+
+	/**
+	 * What the sale already holds, so the picker can mark it.
+	 *
+	 * `addToBucket` aborts the entire call on a token the bucket already stocks,
+	 * and the check is bucket-WIDE — re-adding a common to a different stack
+	 * fails just the same. Without this the seller finds out after signing.
+	 */
+	const [entries, setEntries] = useState<BucketEntry[] | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		client.provider
+			.getBucketEntries(bucket.bucketId)
+			.then((rows) => {
+				if (!cancelled) setEntries(rows);
+			})
+			.catch(() => {
+				/* tiles simply go unmarked */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [client, bucket.bucketId]);
+
+	// Memoised: the picker keys its group memo on this, and a fresh Map every
+	// render would rebuild the groups every render.
+	const stockedMap = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const e of entries ?? []) {
+			m.set(`${bucket.nftContract}:${e.tokenId}`, e.amountStocked);
+		}
+		return m;
+	}, [entries, bucket.nftContract]);
+
 	// Which stacks exist. A sale with one stack has nothing to choose.
 	const stackIds = useMemo(() => {
 		const ids = new Set<number>([0]);
-		for (const s of stacks ?? []) ids.add(s.stack);
+		for (const s of known ?? []) ids.add(s.stack);
 		for (let i = 0; i < (bucket.packDraws?.length ?? 0); i++) ids.add(i);
 		return Array.from(ids).sort((a, b) => a - b);
-	}, [stacks, bucket.packDraws]);
+	}, [known, bucket.packDraws]);
 
+	/** What the sale currently holds in each stack, for the section headers. */
+	const held = useMemo(() => {
+		const m = new Map<number, BucketStack>();
+		for (const s of known ?? []) m.set(s.stack, s);
+		return m;
+	}, [known]);
+
+	const singlesOn = bucket.pricePerDraw !== '0' && bucket.pricePerDraw !== '';
+	const packsOn = bucket.pricePerPack !== '0' && bucket.pricePerPack !== '';
+
+	const picksFor = (id: number) => picks[id] ?? [];
 	const room = Math.max(0, 512 - bucket.entryCount);
-	const valid = picks.length > 0 && picks.length <= Math.min(MAX_PER_CALL, room) && !submitting;
+	const budget = Math.min(MAX_PER_CALL, room);
+	const totalPicks = stackIds.reduce((n, id) => n + picksFor(id).length, 0);
+	const valid = totalPicks > 0 && totalPicks <= budget && !submitting;
+
+	const setStackPicks = (id: number, v: NftMultiPick[]) =>
+		setPicks((prev) => ({ ...prev, [id]: v }));
 
 	async function handleSubmit() {
 		if (!valid) return;
 		setSubmitting(true);
 		setError(null);
 		try {
+			// Stack travels per entry, so a single call can top up several.
+			const entries = stackIds.flatMap((id) =>
+				picksFor(id).map((p) => ({ tokenId: p.tokenId, amount: p.amount, stack: id }))
+			);
 			const { txIds } = await client.addToBucket(username, {
 				bucketId: bucket.bucketId,
 				nftContract: bucket.nftContract,
-				entries: picks.map((p) => ({ tokenId: p.tokenId, amount: p.amount, stack })),
+				entries,
 				skipApproval
 			});
 			const tx = txIds[txIds.length - 1];
@@ -92,43 +175,64 @@ export function AddToBucketForm({
 							This sale already holds the maximum 512 entries.
 						</p>
 					) : (
-						<>
-							{stackIds.length > 1 && (
-								<label className="magi-market-field">
-									<span className="magi-market-field-label">Which stack?</span>
-									<div className="magi-market-xfilter-chips">
-										{stackIds.map((id) => (
-											<button
-												key={id}
-												type="button"
-												className={`magi-market-kindchip${stack === id ? ' active' : ''}`}
+						<div className="magi-market-bucketform magi-market-addstacks">
+							{stackIds.map((id) => {
+								// One stack has nothing to collapse to and nothing to be
+								// distinguished from, so it drops the accordion — the same
+								// call the creation wizard makes.
+								const flat = stackIds.length === 1;
+								const open = flat || openStack === id;
+								const mine = picksFor(id);
+								const has = held.get(id);
+								const units = mine.reduce((n, p) => n + p.amount, 0);
+								return (
+									<div key={id} className={`magi-market-stack${open ? ' open' : ''}${flat ? ' flat' : ''}`}>
+										{!flat && (
+											<div className="magi-market-stack-head">
+												<button
+													type="button"
+													className="magi-market-stack-toggle"
+													aria-expanded={open}
+													disabled={submitting}
+													onClick={() => setOpenStack(open ? -1 : id)}
+												>
+													<span className="magi-market-stack-caret">{open ? '▾' : '▸'}</span>
+													<span className="magi-market-stack-title">Stack {id + 1}</span>
+													<span className="magi-market-stack-role">
+														{stackRole(id, bucket.packDraws ?? [], singlesOn, packsOn).join(' · ')}
+													</span>
+													<span className="magi-market-stack-summary">
+														{has
+														? `${has.unitsLeft} unit${has.unitsLeft === 1 ? '' : 's'} in the sale`
+														: known
+															? 'nothing in it yet'
+															: '…'}
+														{mine.length > 0 && ` · adding ${mine.length} (${units} unit${units === 1 ? '' : 's'})`}
+													</span>
+												</button>
+											</div>
+										)}
+										{open && (
+											<NftMultiPicker
+												config={client.config}
+												username={username}
+												value={mine}
+												onChange={(v) => setStackPicks(id, v)}
+												label={flat ? 'NFTs to add' : `NFTs to add to stack ${id + 1}`}
+												groupEditions
+												lockCollection={bucket.nftContract}
+												filterItem={(it) => canTransferNft(it, username)}
+												// The 24 is per TRANSACTION across every stack, not
+												// per stack — see the same split in the wizard.
+												stocked={stockedMap}
+												max={Math.max(mine.length, budget - (totalPicks - mine.length))}
+												overLimitNote={`One transaction carries ${MAX_PER_CALL} entries — send this batch, then open this form again for the rest. Room for ${room} more in this sale.`}
 												disabled={submitting}
-												onClick={() => setStack(id)}
-											>
-												Stack {id + 1}
-											</button>
-										))}
+											/>
+										)}
 									</div>
-									<span className="magi-market-field-hint">
-										Packs draw each slot from a set stack, so this decides which slot the
-										new stock can fill.
-									</span>
-								</label>
-							)}
-
-							<NftMultiPicker
-								config={client.config}
-								username={username}
-								value={picks}
-								onChange={setPicks}
-								label="NFTs to add"
-								groupEditions
-								lockCollection={bucket.nftContract}
-								filterItem={(it) => canTransferNft(it, username)}
-								max={Math.min(MAX_PER_CALL, room)}
-								overLimitNote={`Add another batch after this one — room for ${room} more entries in this sale.`}
-								disabled={submitting}
-							/>
+								);
+							})}
 
 							<label className="magi-market-approved">
 								<input
@@ -143,8 +247,9 @@ export function AddToBucketForm({
 							</label>
 
 							<p className="magi-market-field-hint">
-								A token already in this sale cannot be added again — restocking appends new
-								ones. {room < MAX_PER_CALL ? `Room for ${room} more entries.` : ''}
+								Anything the sale already holds is marked “in sale” and cannot be picked —
+								a token cannot be stocked twice, in this or any other stack.{' '}
+								{totalPicks > 0 ? `${totalPicks} of ${budget} entries used in this batch.` : `Room for ${room} more entries.`}
 							</p>
 
 							{error && <p className="magi-market-status error">{error}</p>}
@@ -155,9 +260,9 @@ export function AddToBucketForm({
 								disabled={!valid}
 								onClick={handleSubmit}
 							>
-								{submitting ? 'Adding…' : `Add ${picks.length || ''} to the sale`.trim()}
+								{submitting ? 'Adding…' : `Add ${totalPicks || ''} to the sale`.trim()}
 							</button>
-						</>
+						</div>
 					)}
 				</>
 			)}

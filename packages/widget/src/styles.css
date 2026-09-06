@@ -1582,7 +1582,11 @@
 	gap: 0.4rem;
 	margin-bottom: 0.5rem;
 }
-.magi-market-coll-header-action { display: inline-flex; flex-shrink: 0; }
+/* Centre, do NOT stretch: this row holds a text pill next to a 30px icon
+   button, and the flex default (align-items: stretch) inflated the "N sold
+   today" pill from its natural 14px to the button's 30px — a small badge
+   rendered as a tall orange slab. */
+.magi-market-coll-header-action { display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
 .magi-market-coll-header {
 	display: flex;
 	align-items: center;
@@ -1965,17 +1969,10 @@
 	flex-wrap: wrap;
 	min-width: 0;
 }
-/* Open: the toggle is just a caret, so it must NOT flex — otherwise it expands
-   and shoves the name input to the far edge with a lake of space between. */
-.magi-market-stack.open .magi-market-stack-toggle {
-	flex: 0 0 auto;
-}
-.magi-market-stack.open .magi-market-stack-head > input {
-	flex: 1 1 12rem;
-	min-width: 0;
-	max-width: 20rem;
-}
-/* The stack name grows; the slot count stays small — it is a 1-2 digit field and
+/* The name input this used to make room for is gone (stacks are numbered, not
+   named), so an open header is title + caret + the slot field: the toggle takes
+   the row and the slot count stays small. */
+/* The title grows; the slot count stays small — it is a 1-2 digit field and
    a full-width input would imply otherwise. */
 .magi-market-stack-head > :first-child {
 	flex: 1 1 8rem;
@@ -2586,6 +2583,8 @@
 	padding: 0.1rem 0.45rem;
 	border-radius: 999px;
 	font-size: 0.68rem;
+	line-height: 1.5;
+	align-self: center;
 	color: #fff;
 	background: rgba(217, 119, 6, 0.85);
 	white-space: nowrap;
@@ -2827,4 +2826,136 @@
    left and the odds, which does not survive being squeezed narrower. */
 .magi-market-bucketcard-grid {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ---- a sale's contents, grouped by stack ---- */
+/* Stacks are the unit a buyer reasons about — "what is in the rare slot" — so
+   they get real separation rather than one flat grid with the odds of two
+   different draws sitting side by side. */
+.magi-market-stackgroups {
+	display: flex;
+	flex-direction: column;
+	gap: 1.1rem;
+}
+.magi-market-stackgroup {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+.magi-market-stackgroup-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.55rem;
+	padding-bottom: 0.35rem;
+	border-bottom: 1px solid var(--magi-card-border);
+}
+.magi-market-stackgroup-title {
+	margin: 0;
+	font-size: 0.92rem;
+	font-weight: 600;
+	color: var(--magi-text-primary);
+}
+/* What the stack DOES — the pack slots it fills. Accented because it is the
+   thing that makes the percentages below it mean anything. */
+.magi-market-stackgroup-role {
+	font-size: 0.78rem;
+	color: var(--magi-accent);
+}
+/* Stock last: it changes constantly and is the least useful of the three. */
+.magi-market-stackgroup-count {
+	margin-left: auto;
+	font-size: 0.78rem;
+	color: var(--magi-text-secondary);
+}
+.magi-market-stackpager {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+}
+.magi-market-stackpager .magi-market-submit {
+	width: auto;
+	padding: 0.25rem 0.85rem;
+}
+.magi-market-stackpager-count {
+	font-size: 0.78rem;
+	color: var(--magi-text-secondary);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- the picker's own scroller, where a stack's NFTs actually live ---- */
+/* The base rule caps EVERY inline picker at 340px, which is about two rows —
+   so a stack in the mystery-sale wizard showed a handful of cards and asked
+   the seller to scroll a box inside a page. The earlier "let the grid breathe"
+   rule aimed at `.magi-market-grid` and never applied here: the picker renders
+   its tiles inside `.magi-market-nftpicker-inline`, not that grid. Scoped to
+   the bucket wizard so other pickers (send, offer) keep their compact box. */
+.magi-market-bucketform .magi-market-nftpicker-inline {
+	max-height: 46vh;
+}
+/* A full-panel wizard has the whole page: give it enough for four-plus rows,
+   capped so an ultrawide monitor does not turn one stack into a full screen of
+   scrolling with the Next button somewhere below it. */
+.magi-market-view .magi-market-bucketform .magi-market-nftpicker-inline {
+	max-height: min(64vh, 760px);
+}
+
+/* ---- stack sections in the restock form ---- */
+/* What the stack is FOR, next to its number. Stacks have no on-chain name, so
+   this accent line is the only thing distinguishing "the rare slot" from "the
+   commons" — it has to read at a glance, not hide in the secondary grey. */
+.magi-market-stack-role {
+	flex: 0 0 auto;
+	color: var(--magi-accent);
+	font-size: 0.78rem;
+}
+/* A collapsed stack should look like something you press. It was a bare row of
+   text inside a thin outline, which is why the stack picker read as a caption
+   rather than a control. */
+.magi-market-addstacks .magi-market-stack:not(.open) {
+	background: var(--magi-tile-bg);
+}
+.magi-market-addstacks .magi-market-stack:not(.open):hover {
+	border-color: var(--magi-accent);
+}
+.magi-market-addstacks .magi-market-stack-head {
+	margin-bottom: 0;
+}
+.magi-market-addstacks .magi-market-stack.open .magi-market-stack-head {
+	margin-bottom: 0.6rem;
+}
+/* The wizard shrinks an open toggle to a caret because a name input takes the
+   rest of the row. There is no name to edit here — the header keeps its title,
+   its role and its stock — so it spans the row in both states. */
+.magi-market-addstacks .magi-market-stack.open .magi-market-stack-toggle {
+	flex: 1 1 auto;
+}
+.magi-market-addstacks .magi-market-stack-summary {
+	margin-left: auto;
+}
+/* The header carries three things and a phone has room for about one and a
+   half, so the row wraps rather than pushing the stock summary off the right
+   edge (measured: 426px of content in a 390px viewport before this). The role
+   keeps a 12rem basis so it stays on the title's line on a desktop. */
+.magi-market-addstacks .magi-market-stack-toggle {
+	flex-wrap: wrap;
+}
+.magi-market-addstacks .magi-market-stack-role {
+	flex: 1 1 12rem;
+	min-width: 0;
+	white-space: normal;
+}
+.magi-market-addstacks .magi-market-stack-summary {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+/* Already in the mystery sale. Top-RIGHT because the grouped tile's "in"
+   badge owns the left corner and both can show at once — some editions of a
+   template stocked, others still pickable. Amber rather than the accent: this
+   is a reason the tile is unavailable, not a selection. */
+.magi-market-tile-badge.stocked {
+	left: auto;
+	right: 0.35rem;
+	background: rgba(180, 83, 9, 0.9);
 }

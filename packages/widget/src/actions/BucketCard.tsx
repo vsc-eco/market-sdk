@@ -5,7 +5,20 @@ import { createNftClient, 	type NftItem
 import { tokenConfigFrom } from '../components/tokenConfig.js';
 import { Spinner } from '../components/Spinner.js';
 import { useTokenMeta } from '../components/useTokenMeta.js';
+import { useAffordability } from '../components/useAffordability.js';
+import { FundsNote } from '../components/FundsNote.js';
+import { stackRole } from '../components/stackRole.js';
 import magiSvg from '../assets/magi.svg';
+
+/**
+ * NFTs shown per stack before paging.
+ *
+ * A stack can hold hundreds of entries and they all carry an image, so
+ * rendering the lot made opening a sale a scroll through someone else's
+ * inventory — and buried the second stack, which is usually the one worth
+ * looking at, below the first.
+ */
+const ENTRIES_PER_PAGE = 10;
 
 export interface BucketCardProps {
 	client: MarketClient;
@@ -86,15 +99,121 @@ function EntryTile({
 }
 
 /**
- * A bucket rendered as a collapsible group: the header carries the price(s) and
- * the draw actions, the body shows what is still inside with per-stack odds.
+ * Prev/next over one stack's entries.
  *
- * Stacks are surfaced explicitly rather than folded into one number because a
- * ("stack" is the user-facing name for what the contract's wire format calls a
- * stack — `entries[].stack`, `packDraws[i]` — kept distinct from liquidity stacks.)
- * bucket with guaranteed slots drains UNEVENLY — the guaranteed stack empties
+ * Paging rather than a "show more" that only grows: a stack of 200 cards is
+ * something you scan a page at a time, and a list that can only get longer
+ * strands the actions at the bottom of the panel again.
+ */
+function Pager({
+	page,
+	pages,
+	total,
+	onPage
+}: {
+	page: number;
+	pages: number;
+	total: number;
+	onPage: (p: number) => void;
+}) {
+	const from = page * ENTRIES_PER_PAGE + 1;
+	const to = Math.min(total, (page + 1) * ENTRIES_PER_PAGE);
+	return (
+		<div className="magi-market-stackpager">
+			<button
+				type="button"
+				className="magi-market-submit ghost"
+				disabled={page === 0}
+				onClick={() => onPage(page - 1)}
+			>
+				Back
+			</button>
+			<span className="magi-market-stackpager-count">
+				{from}–{to} of {total}
+			</span>
+			<button
+				type="button"
+				className="magi-market-submit ghost"
+				disabled={page >= pages - 1}
+				onClick={() => onPage(page + 1)}
+			>
+				More
+			</button>
+		</div>
+	);
+}
+
+/** One stack: what it is, then its contents a page at a time. */
+function StackGroup({
+	stack,
+	entries,
+	unitsLeft,
+	role,
+	sole,
+	images,
+	nftContract,
+	onOpenNft
+}: {
+	stack: number;
+	entries: BucketEntry[];
+	unitsLeft: number;
+	role: string[];
+	sole: boolean;
+	images: Map<string, string | null>;
+	nftContract: string;
+	onOpenNft: (nftContract: string, tokenId: string) => void;
+}) {
+	const [page, setPage] = useState(0);
+	const pages = Math.max(1, Math.ceil(entries.length / ENTRIES_PER_PAGE));
+	// A stack that shrinks under you (a draw lands, stock is added) must not
+	// leave the pager pointing past the end.
+	const safePage = Math.min(page, pages - 1);
+	const shown = entries.slice(safePage * ENTRIES_PER_PAGE, (safePage + 1) * ENTRIES_PER_PAGE);
+
+	/** Chance of drawing this entry, GIVEN a draw from this stack. */
+	const chanceOf = (e: BucketEntry): number | null =>
+		unitsLeft > 0 ? (e.amountLeft / unitsLeft) * 100 : null;
+
+	return (
+		<section className="magi-market-stackgroup">
+			<header className="magi-market-stackgroup-head">
+				<h4 className="magi-market-stackgroup-title">
+					{sole ? 'Contents' : `Stack ${stack + 1}`}
+				</h4>
+				<span className="magi-market-stackgroup-role">{role.join(' · ')}</span>
+				<span className="magi-market-stackgroup-count">
+					{unitsLeft} unit{unitsLeft === 1 ? '' : 's'} left · {entries.length} NFT
+					{entries.length === 1 ? '' : 's'}
+				</span>
+			</header>
+			<div className="magi-market-grid magi-market-bucketcard-grid">
+				{shown.map((e) => (
+					<EntryTile
+						key={`${e.stack}:${e.tokenId}`}
+						imageUrl={images.get(`${nftContract}:${e.tokenId}`) ?? null}
+						entry={e}
+						chance={chanceOf(e)}
+						onOpen={() => onOpenNft(nftContract, e.tokenId)}
+					/>
+				))}
+			</div>
+			{entries.length > ENTRIES_PER_PAGE && (
+				<Pager page={safePage} pages={pages} total={entries.length} onPage={setPage} />
+			)}
+		</section>
+	);
+}
+
+/**
+ * A bucket rendered as its stacks: each one says what it is and what it holds,
+ * a page at a time.
+ *
+ * Stacks are surfaced explicitly rather than folded into one flat grid because
+ * a bucket with guaranteed slots drains UNEVENLY — the guaranteed stack empties
  * first and strands the rest — so "units left" alone can suggest a pack is
- * available when it cannot actually be filled.
+ * available when it cannot actually be filled. It also stops the odds being
+ * misread: every percentage here is conditional on a draw from ITS OWN stack,
+ * which is only honest if you can see which stack that is.
  */
 export function BucketCard({
 	client,
@@ -134,7 +253,7 @@ export function BucketCard({
 				const p = await client.provider.getBucketStacks(bucket.bucketId);
 				if (!cancelled) setStacks(p);
 			} catch {
-				/* odds fall back to per-bucket */
+				/* the per-stack totals get summed from the entries instead */
 			}
 			if (!rows.length) return;
 			try {
@@ -157,15 +276,48 @@ export function BucketCard({
 		return m;
 	}, [stacks]);
 
-	/** Chance of drawing this entry, given a draw from its own stack. */
-	const chanceOf = (e: BucketEntry): number | null => {
-		const total = stackUnits.get(e.stack);
-		if (!total) return null;
-		return (e.amountLeft / total) * 100;
-	};
-
 	const singlesOn = bucket.pricePerDraw !== '0' && bucket.pricePerDraw !== '';
 	const packsOn = bucket.pricePerPack !== '0' && bucket.pricePerPack !== '';
+
+	/**
+	 * The sale's stacks, in contract order, each with its own entries.
+	 *
+	 * Units come from the stacks view when it answered, and are summed from the
+	 * entries when it did not — the old code left the odds blank in that case,
+	 * which is a worse answer than one derived from stock we already hold.
+	 */
+	const stackViews = useMemo(() => {
+		const byStack = new Map<number, BucketEntry[]>();
+		for (const e of entries ?? []) {
+			const list = byStack.get(e.stack);
+			if (list) list.push(e);
+			else byStack.set(e.stack, [e]);
+		}
+		return Array.from(byStack.entries())
+			.map(([stack, list]) => ({
+				stack,
+				entries: list
+					.slice()
+					.sort((a, b) => b.amountLeft - a.amountLeft || a.tokenId.localeCompare(b.tokenId)),
+				unitsLeft: stackUnits.get(stack) ?? list.reduce((n, e) => n + e.amountLeft, 0)
+			}))
+			.sort((a, b) => a.stack - b.stack);
+	}, [entries, stackUnits]);
+
+	// Two prices, two buttons, two separate answers: affording a single draw
+	// says nothing about affording a pack.
+	const drawFunds = useAffordability(
+		client.config,
+		username,
+		bucket.paymentToken,
+		singlesOn ? bucket.pricePerDraw : null
+	);
+	const packFunds = useAffordability(
+		client.config,
+		username,
+		bucket.paymentToken,
+		packsOn ? bucket.pricePerPack : null
+	);
 
 	/** A pack needs every promised slot filled, so check stacks not the total. */
 	const packFillable = useMemo(() => {
@@ -201,7 +353,8 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							disabled={!username || busy || bucket.unitsLeft === 0}
+							disabled={!username || busy || bucket.unitsLeft === 0 || !drawFunds.ok}
+							title={drawFunds.ok ? undefined : 'Not enough funds for a draw'}
 							onClick={onDraw}
 						>
 							Draw one
@@ -211,8 +364,14 @@ export function BucketCard({
 						<button
 							type="button"
 							className="magi-market-submit"
-							disabled={!username || busy || !packFillable}
-							title={packFillable ? undefined : 'A guaranteed stack has run out'}
+							disabled={!username || busy || !packFillable || !packFunds.ok}
+							title={
+								!packFillable
+									? 'A guaranteed stack has run out'
+									: packFunds.ok
+										? undefined
+										: 'Not enough funds for a pack'
+							}
 							onClick={onBuyPack}
 						>
 							Buy pack ({bucket.packSize})
@@ -230,21 +389,20 @@ export function BucketCard({
 		// the layout on a phone. Prices and actions get a row that wraps.
 		<div className="magi-market-bucketcard">
 			<div className="magi-market-bucketcard-bar">{action}</div>
+			{!mine && (
+				<FundsNote
+					funds={drawFunds.ok ? packFunds : drawFunds}
+					paymentToken={bucket.paymentToken}
+					tokenMeta={tokenMeta}
+				/>
+			)}
 			<div className="magi-market-row-sub" style={{ padding: '0 0.2rem 0.5rem' }}>
 				{bucket.unitsLeft} of {bucket.unitsStocked} left
-				{bucket.packDraws.length > 1 && (
-					<> · pack: {bucket.packDraws.map((n: number, i: number) => `${n} from stack ${i + 1}`).join(' + ')}</>
-				)}
-				{stacks.length > 1 && (
-					<>
-						{' '}
-						·{' '}
-						{stacks
-							.slice()
-							.sort((a, b) => a.stack - b.stack)
-							.map((p) => `stack ${p.stack + 1}: ${p.unitsLeft}`)
-							.join(', ')}
-					</>
+				{packsOn && bucket.packDraws.length > 0 && (
+					<> · pack: {bucket.packDraws
+						.map((n: number, i: number) => (n > 0 ? `${n} from stack ${i + 1}` : null))
+						.filter(Boolean)
+						.join(' + ')}</>
 				)}
 				{bucket.unitsDropped > 0 && (
 					<> · {bucket.unitsDropped} withdrawn by the seller</>
@@ -255,21 +413,18 @@ export function BucketCard({
 			) : entries.length === 0 ? (
 				<div className="magi-market-state">Contents not indexed yet.</div>
 			) : (
-				// The tiles lost their grid when this card stopped being wrapped
-				// in a CollectionGroup — which supplied one — so they stacked one
-				// per row. Two per row: these carry a picture, a count and the
-				// odds, and that does not survive being squeezed narrower.
-				<div className="magi-market-grid magi-market-bucketcard-grid">
-				{entries
-					.slice()
-					.sort((a, b) => a.stack - b.stack || b.amountLeft - a.amountLeft)
-					.map((e) => (
-						<EntryTile
-							key={`${e.stack}:${e.tokenId}`}
-							imageUrl={images.get(`${bucket.nftContract}:${e.tokenId}`) ?? null}
-							entry={e}
-							chance={chanceOf(e)}
-							onOpen={() => onOpenNft(bucket.nftContract, e.tokenId)}
+				<div className="magi-market-stackgroups">
+					{stackViews.map((v) => (
+						<StackGroup
+							key={v.stack}
+							stack={v.stack}
+							entries={v.entries}
+							unitsLeft={v.unitsLeft}
+							role={stackRole(v.stack, bucket.packDraws, singlesOn, packsOn)}
+							sole={stackViews.length === 1}
+							images={images}
+							nftContract={bucket.nftContract}
+							onOpenNft={onOpenNft}
 						/>
 					))}
 				</div>

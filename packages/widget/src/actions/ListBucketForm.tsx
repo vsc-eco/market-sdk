@@ -43,17 +43,26 @@ const MAX_STACKS = 8;
  * those.
  */
 interface Stack {
-	/** Display only — the contract identifies a stack by its index. */
-	name: string;
 	picks: NftMultiPick[];
 	/** Slots this stack fills in one pack. 0 = in the bucket, never guaranteed. */
 	perPack: string;
 }
 
-const DEFAULT_STACK_NAMES = ['Commons', 'Uncommons', 'Rares', 'Holos', 'Secrets', 'Stack 6', 'Stack 7', 'Stack 8'];
+/**
+ * A stack's name is its position, because that is the only thing that survives.
+ *
+ * `listBucket` sends entries keyed by stack INDEX and nothing else — there is
+ * no field on chain for a per-stack name. A naming box therefore asked the
+ * seller to christen "Rares" and then showed every buyer "Stack 2", which is
+ * worse than never offering it: the seller's own sale does not use the word
+ * they chose. Both sides say the same thing now.
+ */
+function stackLabel(index: number): string {
+	return `Stack ${index + 1}`;
+}
 
-function newStack(index: number, perPack: string): Stack {
-	return { name: DEFAULT_STACK_NAMES[index] ?? `Stack ${index + 1}`, picks: [], perPack };
+function newStack(_index: number, perPack: string): Stack {
+	return { picks: [], perPack };
 }
 
 /**
@@ -176,7 +185,7 @@ export function ListBucketForm({
 			if (totalEntries > MAX_ENTRIES)
 				return `${totalEntries} NFTs picked — one transaction carries ${MAX_ENTRIES}. Open the sale with these and add the rest from its "Add" button.`;
 			const empty = stacks.findIndex((t) => t.picks.length === 0);
-			if (empty !== -1) return `"${stacks[empty].name}" has no NFTs — fill it or remove the stack.`;
+			if (empty !== -1) return `${stackLabel(empty)} has no NFTs — fill it or remove the stack.`;
 			if (sellPacks) {
 				if (packSize > 24) return `A pack of ${packSize} exceeds the contract's 24-draw limit.`;
 				// One rule, checked here and shown live on the stack itself: a
@@ -184,11 +193,11 @@ export function ListBucketForm({
 				// more than it holds refuses every purchase — which the buyer
 				// discovers rather than the seller.
 				const bad = stacks.findIndex((t) => stackSlotProblem(t) !== null);
-				if (bad !== -1) return `"${stacks[bad].name}": ${stackSlotProblem(stacks[bad])}`;
+				if (bad !== -1) return `${stackLabel(bad)}: ${stackSlotProblem(stacks[bad])}`;
 			}
 			// Single draws always come from the first stack, so it must have stock.
 			if (sellSingles && units(stacks[0]) === 0)
-				return `Single draws come from "${stacks[0].name}", which is empty.`;
+				return `Single draws come from ${stackLabel(0)}, which is empty.`;
 			return null;
 		})();
 
@@ -364,7 +373,7 @@ export function ListBucketForm({
 												onClick={() => setOpenStack(open ? -1 : i)}
 											>
 												<span className="magi-market-stack-caret">{open ? '▾' : '▸'}</span>
-												{open ? null : <span className="magi-market-stack-title">{stack.name}</span>}
+												<span className="magi-market-stack-title">{stackLabel(i)}</span>
 												{!open && (
 													<span className="magi-market-stack-summary">
 														{stack.picks.length} NFT{stack.picks.length === 1 ? '' : 's'} · {u} unit
@@ -373,13 +382,6 @@ export function ListBucketForm({
 													</span>
 												)}
 											</button>
-											{open && (
-												<TextInput
-													value={stack.name}
-													onChange={(v) => updateStack(i, { name: v })}
-													disabled={submitting}
-												/>
-											)}
 											{open && sellPacks && (
 												<label className="magi-market-stack-slots">
 													<span>per pack</span>
@@ -419,14 +421,24 @@ export function ListBucketForm({
 													username={username}
 													value={stack.picks}
 													onChange={(picks) => updateStack(i, { picks })}
-													label={flat ? 'NFTs in this sale' : `NFTs in "${stack.name}"`}
+													label={flat ? 'NFTs in this sale' : `NFTs in ${stackLabel(i)}`}
 													// Stock by the handful: editions fold into one tile
 													// and ask how many, rather than making the seller
 													// click twenty near-identical cards.
 													groupEditions
 													lockCollection={lockCollection}
 													filterItem={(it) => canTransferNft(it, username)}
-													max={MAX_ENTRIES}
+													// The 24-entry ceiling is on the TRANSACTION, not on one
+													// stack: three stacks of 24 is 72 entries and the contract
+													// refuses all of it. Each picker therefore gets what is
+													// left once the OTHER stacks keep theirs, so the limit is
+													// hit inside the picker — where the seller can see it —
+													// rather than as a validation error two steps later.
+													max={Math.max(
+														stack.picks.length,
+														MAX_ENTRIES - (totalEntries - stack.picks.length)
+													)}
+													overLimitNote={`One transaction opens a sale with ${MAX_ENTRIES} entries — put the rest in from the sale's own "Add" button once it exists, up to 512 in total.`}
 													disabled={submitting}
 												/>
 											</>
@@ -486,9 +498,12 @@ export function ListBucketForm({
 							{sellPacks && (
 								<Field
 									label="Price per pack"
+									// Label from the stack's real index BEFORE dropping the
+									// ones with no slots — filtering first renumbers them, so a
+									// pack of "1 from stack 2" would be described as stack 1.
 									hint={`Each pack: ${stacks
-										.filter((t) => slots(t) > 0)
-										.map((t) => `${slots(t)} ${t.name.toLowerCase()}`)
+										.map((t, i) => (slots(t) > 0 ? `${slots(t)} from ${stackLabel(i).toLowerCase()}` : null))
+										.filter(Boolean)
 										.join(' + ')} (${packSize} card${packSize === 1 ? '' : 's'}).`}
 								>
 									<TextInput
@@ -532,7 +547,7 @@ export function ListBucketForm({
 									return (
 										<div key={i} className="magi-market-review-row">
 											<dt>
-												{t.name}
+												{stackLabel(i)}
 												{sellPacks && slots(t) > 0 && ` · ${slots(t)}/pack`}
 											</dt>
 											<dd>
