@@ -84,7 +84,9 @@ export const MAINNET_CONFIG: MagiConfig = {
 		'https://indexer.magi.milohpr.com/v1/graphql'
 	],
 	gqlUrls: [
-		'https://api.vsc.eco/api/v1/graphql',
+		// api.vsc.eco was retired (2026-09-17): DNS still answers but TCP never
+		// completes, so a first-listed dead host stalled every first request
+		// until the caller's timeout.
 		'https://vsc.techcoderx.com/api/v1/graphql',
 		'https://api.okinoko.io/api/v1/graphql',
 		'https://magi.milohpr.com/api/v1/graphql'
