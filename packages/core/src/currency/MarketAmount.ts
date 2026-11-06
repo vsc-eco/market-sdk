@@ -20,6 +20,7 @@ export class MarketAmount {
 	/**
 	 * Parse a human "12.345" string at the given decimals into smallest units.
 	 *
+	 * - Rejects empty input ("", ".", "-") instead of reading it as zero.
 	 * - Rejects negatives: the contract treats every money field as unsigned;
 	 *   a `-5` smallest-unit string would parse as the literal characters and
 	 *   abort on the wire, but at the client boundary we can produce a clearer
@@ -30,7 +31,11 @@ export class MarketAmount {
 	 */
 	static fromDecimal(value: string | number, decimals: number): MarketAmount {
 		const s = String(value).trim();
-		if (s === '') return new MarketAmount(0n, decimals);
+		// A blank field is not an amount. Reading it (or a lone "." / "-") as
+		// zero hid the mistake and let an empty price through as 0.
+		if (s === '' || s === '-' || s === '.' || s === '-.') {
+			throw new Error(`MarketAmount.fromDecimal: an amount is required, got "${s}"`);
+		}
 		if (!/^-?\d*\.?\d*$/.test(s)) {
 			throw new Error(`MarketAmount.fromDecimal: invalid number "${s}"`);
 		}
